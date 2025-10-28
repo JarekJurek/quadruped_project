@@ -99,10 +99,25 @@ class HopfNetwork():
     """ For coupling oscillators in phase space. 
     [TODO] Update all coupling matrices.
     """
-    self.PHI_trot = np.zeros((4,4)) # [TODO]
-    self.PHI_walk = np.zeros((4,4)) # [TODO]
-    self.PHI_bound = np.zeros((4,4)) # [TODO]
-    self.PHI_pace = np.zeros((4,4)) # [TODO]
+    self.PHI_trot = np.array([[0., -0.5 * 2 * np.pi(), -0.5 * 2 * np.pi(), 0.], 
+                              [0.5 * 2 * np.pi(), 0., 0., 0.5 * 2 * np.pi()], 
+                              [0.5 * 2 * np.pi(), 0., 0., 0.5 * 2 * np.pi()], 
+                              [0., -0.5 * 2 * np.pi(), -0.5 * 2 * np.pi(), 0.]])
+    
+    self.PHI_walk = np.array([[0., -0.5 * 2 * np.pi(), -0.25 * 2 * np.pi(), 0.25 * 2 * np.pi()], 
+                              [0.5 * 2 * np.pi(), 0., 0.25 * 2 * np.pi(), 0.75 * 2 * np.pi()], 
+                              [0.25 * 2 * np.pi(), -0.25 * 2 * np.pi(), 0., 0.5 * 2 * np.pi()], 
+                              [-0.25 * 2 * np.pi(), -0.75 * 2 * np.pi(), -0.5 * 2 * np.pi(), 0.]])
+    
+    self.PHI_bound = np.array([[0., 0., -0.5 * 2 * np.pi(), -0.5 * 2 * np.pi()], 
+                              [0., 0., -0.5 * 2 * np.pi(), -0.5 * 2 * np.pi()], 
+                              [0.5 * 2 * np.pi(), 0.5 * 2 * np.pi(), 0., 0.], 
+                              [0.5 * 2 * np.pi(), 0.5 * 2 * np.pi(), 0., 0.]])
+    
+    self.PHI_pace = np.array([[0., -0.5 * 2 * np.pi(), 0., -0.5 * 2 * np.pi()], 
+                              [0.5 * 2 * np.pi(), 0., 0.5 * 2 * np.pi(), 0.], 
+                              [0., -0.5 * 2 * np.pi(), 0., -0.5 * 2 * np.pi()], 
+                              [0.5 * 2 * np.pi(), 0., 0.5 * 2 * np.pi(), 0.]])
 
     if gait == "TROT":
       self.PHI = self.PHI_trot
