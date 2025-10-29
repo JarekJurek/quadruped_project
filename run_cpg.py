@@ -61,7 +61,10 @@ env = QuadrupedGymEnv(render=True,              # visualize
                     )
 
 # initialize Hopf Network, supply gait
-cpg = HopfNetwork(time_step=TIME_STEP, gait="WALK")
+cpg = HopfNetwork(time_step=TIME_STEP, gait="TROT")
+# cpg = HopfNetwork(time_step=TIME_STEP, gait="PACE")
+# cpg = HopfNetwork(time_step=TIME_STEP, gait="BOUND")
+# cpg = HopfNetwork(time_step=TIME_STEP, gait="WALK")
 
 TEST_STEPS = int(10 / (TIME_STEP))
 t = np.arange(TEST_STEPS)*TIME_STEP
@@ -108,13 +111,13 @@ for j in range(TEST_STEPS):
       # [TODO] 
 
       # Get current Jacobian and foot position in leg frame (see ComputeJacobianAndPosition() in quadruped.py)
-      # [TODO] 
+      J, pos_leg_frame = env.robot.ComputeJacobianAndPosition(i)
 
       # Get current foot velocity in leg frame (Equation 2)
-      # [TODO] 
+      foot_lin_vel_leg_frame = J @ dq[3*i:3*i+3]
 
       # Calculate torque contribution from Cartesian PD (Equation 5) [Make sure you are using matrix multiplications]
-      tau += np.zeros(3) # [TODO]
+      tau += J.T @ (kpCartesian @ (leg_xyz - pos_leg_frame) + kdCartesian @ (0 - foot_lin_vel_leg_frame)) # [TODO]
 
     # Set tau for legi in action vector
     action[3*i:3*i+3] = tau
