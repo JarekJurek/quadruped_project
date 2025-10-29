@@ -30,32 +30,38 @@
 
 """This file implements the gym environment for a quadruped. """
 
-import os, inspect
+import inspect
+import os
+
 # so we can import files
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 os.sys.path.insert(0, currentdir)
 
 # misc
-import time, datetime
-import numpy as np
+import datetime
+import random
+import sys
+import time
 from typing import Optional
 
 # gym
 import gymnasium as gym
-from gymnasium import spaces
-from gymnasium.utils import seeding
+import numpy as np
 
 # pybullet
 import pybullet
-import pybullet_utils.bullet_client as bc
 import pybullet_data
-import random
+import pybullet_utils.bullet_client as bc
+from gymnasium import spaces
+from gymnasium.utils import seeding
+
 random.seed(10)
 
 # quadruped and configs
-import quadruped
 import configs_a1 as robot_config
+import quadruped
 from hopf_network import HopfNetwork
+
 
 # helper functions
 def unit_vector(vector):
