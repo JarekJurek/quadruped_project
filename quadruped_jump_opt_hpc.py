@@ -6,7 +6,6 @@ import optuna
 from optuna.trial import Trial
 
 import wandb
-from env.simulation import QuadSimulator, SimulationOptions
 from env.quadruped_gym_env import QuadrupedGymEnv
 from run_cpg import CPGSimulator
 from quadruped_jump_opt import get_gait_type, get_objective
