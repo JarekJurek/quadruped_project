@@ -30,9 +30,7 @@
 
 """ Run CPG """
 
-import time
 import numpy as np
-import matplotlib
 
 # adapt as needed for your system
 # from sys import platform
