@@ -99,25 +99,50 @@ class HopfNetwork():
     """ For coupling oscillators in phase space. 
     [TODO] Update all coupling matrices.
     """
-    self.PHI_trot = np.array([[0., -0.5 * 2 * np.pi, -0.5 * 2 * np.pi, 0.], 
-                              [0.5 * 2 * np.pi, 0., 0., 0.5 * 2 * np.pi], 
-                              [0.5 * 2 * np.pi, 0., 0., 0.5 * 2 * np.pi], 
-                              [0., -0.5 * 2 * np.pi, -0.5 * 2 * np.pi, 0.]])
+    # self.PHI_trot = np.array([[0., -0.5 * 2 * np.pi, -0.5 * 2 * np.pi, 0.], 
+    #                           [0.5 * 2 * np.pi, 0., 0., 0.5 * 2 * np.pi], 
+    #                           [0.5 * 2 * np.pi, 0., 0., 0.5 * 2 * np.pi], 
+    #                           [0., -0.5 * 2 * np.pi, -0.5 * 2 * np.pi, 0.]])
     
-    self.PHI_walk = np.array([[0., -0.5 * 2 * np.pi, -0.25 * 2 * np.pi, 0.25 * 2 * np.pi], 
-                              [0.5 * 2 * np.pi, 0., 0.25 * 2 * np.pi, 0.75 * 2 * np.pi], 
-                              [0.25 * 2 * np.pi, -0.25 * 2 * np.pi, 0., 0.5 * 2 * np.pi], 
-                              [-0.25 * 2 * np.pi, -0.75 * 2 * np.pi, -0.5 * 2 * np.pi, 0.]])
+    # self.PHI_walk = np.array([[0., -0.5 * 2 * np.pi, -0.25 * 2 * np.pi, 0.25 * 2 * np.pi], 
+    #                           [0.5 * 2 * np.pi, 0., 0.25 * 2 * np.pi, 0.75 * 2 * np.pi], 
+    #                           [0.25 * 2 * np.pi, -0.25 * 2 * np.pi, 0., 0.5 * 2 * np.pi], 
+    #                           [-0.25 * 2 * np.pi, -0.75 * 2 * np.pi, -0.5 * 2 * np.pi, 0.]])
     
-    self.PHI_bound = np.array([[0., 0., -0.5 * 2 * np.pi, -0.5 * 2 * np.pi], 
-                              [0., 0., -0.5 * 2 * np.pi, -0.5 * 2 * np.pi], 
-                              [0.5 * 2 * np.pi, 0.5 * 2 * np.pi, 0., 0.], 
-                              [0.5 * 2 * np.pi, 0.5 * 2 * np.pi, 0., 0.]])
+    # self.PHI_bound = np.array([[0., 0., -0.5 * 2 * np.pi, -0.5 * 2 * np.pi], 
+    #                           [0., 0., -0.5 * 2 * np.pi, -0.5 * 2 * np.pi], 
+    #                           [0.5 * 2 * np.pi, 0.5 * 2 * np.pi, 0., 0.], 
+    #                           [0.5 * 2 * np.pi, 0.5 * 2 * np.pi, 0., 0.]])
     
-    self.PHI_pace = np.array([[0., -0.5 * 2 * np.pi, 0., -0.5 * 2 * np.pi], 
-                              [0.5 * 2 * np.pi, 0., 0.5 * 2 * np.pi, 0.], 
-                              [0., -0.5 * 2 * np.pi, 0., -0.5 * 2 * np.pi], 
-                              [0.5 * 2 * np.pi, 0., 0.5 * 2 * np.pi, 0.]])
+    # self.PHI_pace = np.array([[0., -0.5 * 2 * np.pi, 0., -0.5 * 2 * np.pi], 
+    #                           [0.5 * 2 * np.pi, 0., 0.5 * 2 * np.pi, 0.], 
+    #                           [0., -0.5 * 2 * np.pi, 0., -0.5 * 2 * np.pi], 
+    #                           [0.5 * 2 * np.pi, 0., 0.5 * 2 * np.pi, 0.]])
+    self.PHI_trot = np.array([[0., np.pi, np.pi, 0.], 
+                              [-np.pi, 0., 0., -np.pi], 
+                              [-np.pi, 0., 0., -np.pi], 
+                              [0., np.pi, np.pi, 0.]])
+    
+    # WALK: Four-beat gait - each leg 90° apart
+    # Sequence: FR(0°) -> FL(90°) -> RR(180°) -> RL(270°)
+    self.PHI_walk = np.array([[0., np.pi/2, np.pi, 3*np.pi/2], 
+                              [-np.pi/2, 0., np.pi/2, np.pi], 
+                              [-np.pi, -np.pi/2, 0., np.pi/2], 
+                              [-3*np.pi/2, -np.pi, -np.pi/2, 0.]])
+    
+    # BOUND: Front legs together, rear legs together, 180° apart
+    # Phase differences: FR=0°, FL=0°, RR=180°, RL=180°
+    self.PHI_bound = np.array([[0., 0., np.pi, np.pi], 
+                               [0., 0., np.pi, np.pi], 
+                               [-np.pi, -np.pi, 0., 0.], 
+                               [-np.pi, -np.pi, 0., 0.]])
+    
+    # PACE: Same-side legs move together (FR+RR, FL+RL)
+    # Phase differences: FR=0°, FL=180°, RR=0°, RL=180°
+    self.PHI_pace = np.array([[0., np.pi, 0., np.pi], 
+                              [-np.pi, 0., -np.pi, 0.], 
+                              [0., np.pi, 0., np.pi], 
+                              [-np.pi, 0., -np.pi, 0.]])
 
     if gait == "TROT":
       self.PHI = self.PHI_trot
@@ -140,6 +165,7 @@ class HopfNetwork():
     
     # map CPG variables to Cartesian foot xz positions (Equations 8, 9) 
     x = -self.X[0] * np.cos(self.X[1]) # [TODO]
+    # x = -self.X[0] * np.sin(self.X[1])
     z = np.zeros_like(x)
     for i in range(4): # [TODO]
       theta_sin = np.sin(self.X[1][i])
