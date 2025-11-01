@@ -77,8 +77,8 @@ class CPGSimulator():
     # initialize Hopf Network, supply gait
     self.cpg = HopfNetwork(time_step=self.params["timestep"], 
                           mu=params["mu"],                 # intrinsic amplitude, converges to sqrt(mu)
-                          omega_swing=params["omega_swing"],   # frequency in swing phase (can edit)
-                          omega_stance=params["omega_stance"],  # frequency in stance phase (can edit)
+                          omega_swing=params["omega_swing"]*2*np.pi,   # frequency in swing phase (can edit)
+                          omega_stance=params["omega_stance"]*2*np.pi,  # frequency in stance phase (can edit)
                           alpha=params["alpha"],
                           des_step_len=params["des_step_len"],
                           gait=params["gait_type"],             # Gait, can be TROT, WALK, PACE, BOUND, etc.
@@ -431,9 +431,9 @@ class CPGSimulator():
 
 def main():
   params = {
-        "mu": 0.8**2,                 # intrinsic amplitude, converges to sqrt(mu)
-        "omega_swing": 6*2*np.pi,   # frequency in swing phase (can edit)
-        "omega_stance": 4*2*np.pi,
+        "mu": 1**2,                 # intrinsic amplitude, converges to sqrt(mu)
+        "omega_swing": 2*2*np.pi,   # frequency in swing phase (can edit)
+        "omega_stance": 0.5*2*np.pi,
         "alpha": 50,                # amplitude convergence factor
         "des_step_len": 0.05,       # desired step length
         "sim_duration": SIM_DURATION,

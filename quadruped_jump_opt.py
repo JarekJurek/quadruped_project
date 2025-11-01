@@ -64,12 +64,12 @@ def quadruped_cpg_optimization(args):
 def evaluate_run(trial: Trial, env: QuadrupedGymEnv, gait_type: str) -> float:
     # Create parameters dictionary with optimization variables
     params = {
-        "mu": 1**2,                 # intrinsic amplitude, converges to sqrt(mu)
-        "omega_swing": 5*2*np.pi,   # frequency in swing phase (can edit)
-        "omega_stance": 2*2*np.pi,
+        "mu": trial.suggest_float(name="mu", low=0.5**2, high=3**2, step=0.25),                 # intrinsic amplitude, converges to sqrt(mu)
+        "omega_swing": trial.suggest_float(name="omega_swing", low=0.25, high=4, step=0.25),   # frequency in swing phase (can edit)
+        "omega_stance": trial.suggest_float(name="omega_stance", low=0.25, high=4, step=0.25),
         "alpha": 50,                # amplitude convergence factor
         "des_step_len": 0.05,       # desired step length
-        "sim_duration": 10,
+        "sim_duration": 5,
         "timestep": 1e-3,
         "make_plots": False,
         "save_to_csv": False,
