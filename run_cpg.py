@@ -61,8 +61,8 @@ PLOT_FOOT_POSITIONS = False
 # PLOT_JOINT_ANGLES = True
 PLOT_JOINT_ANGLES = False
 
-# GAIT = "TROT"
-GAIT = "PACE"
+GAIT = "TROT"
+# GAIT = "PACE"
 # GAIT = "BOUND"
 # GAIT = "WALK"
 
@@ -80,18 +80,12 @@ env = QuadrupedGymEnv(render=True,              # visualize
 
 # initialize Hopf Network, supply gait
 cpg = HopfNetwork(time_step=TIME_STEP, 
-                  mu=1.5**2,                 # intrinsic amplitude, converges to sqrt(mu)
-                  omega_swing=8*2*np.pi,   # frequency in swing phase (can edit)
-                  omega_stance=2*2*np.pi,  # frequency in stance phase (can edit)
+                  mu=0.8**2,                 # intrinsic amplitude, converges to sqrt(mu)
+                  omega_swing=6*2*np.pi,   # frequency in swing phase (can edit)
+                  omega_stance=4*2*np.pi,  # frequency in stance phase (can edit)
                   gait=GAIT,             # Gait, can be TROT, WALK, PACE, BOUND, etc.
-                  alpha=50,                # amplitude convergence factor
-                  coupling_strength=0.75,  # coefficient to multiply coupling matrix
                   couple=True,             # whether oscillators should be coupled
-                  ground_clearance=0.07,   # foot swing height 
-                  ground_penetration=0.01, # foot stance penetration into ground 
-                  robot_height=0.3,        # in nominal case (standing) 
-                  des_step_len=0.05,       # desired step length 
-                  max_step_len_rl=0.1,)
+                  )
 # cpg = HopfNetwork(time_step=TIME_STEP, gait="PACE")
 # cpg = HopfNetwork(time_step=TIME_STEP, gait="BOUND")
 # cpg = HopfNetwork(time_step=TIME_STEP, gait="WALK")
@@ -119,8 +113,8 @@ kp=np.array([100,100,100])
 kd=np.array([2,2,2])
 
 # Cartesian PD gains
-kpCartesian = np.diag([500]*3)
-kdCartesian = np.diag([20]*3)
+kpCartesian = np.array([500, 400, 400])
+kdCartesian = np.array([30, 50, 40])
 
 for j in range(TEST_STEPS):
   # initialize torque array to send to motors
