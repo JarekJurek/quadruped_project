@@ -7,12 +7,14 @@ from optuna.trial import Trial
 
 import wandb
 from env.simulation import QuadSimulator, SimulationOptions
-from quadruped_jump import quadruped_jump
-from quadruped_jump_opt import get_motion_mode, get_objective
+from env.quadruped_gym_env import QuadrupedGymEnv
+from run_cpg import CPGSimulator
+from quadruped_jump_opt import get_gait_type, get_objective
 
 N_LEGS = 4
 N_JOINTS = 3
 
+TIME_STEP = 0.001
 
 class WeightsAndBiasesCallback:
     def __init__(self, metric_name: str = "objective_value"):
@@ -44,13 +46,13 @@ class WeightsAndBiasesCallback:
             })
 
 
-def quadruped_jump_optimization(args):
+def quadruped_cpg_optimization(args):
     # Get worker ID from LSF environment (or default for local testing)
     worker_id = int(os.getenv('LSB_JOBINDEX', '1'))
 
     n_trials = args.n_trials
 
-    motion_mode = get_motion_mode(args)
+    gait_type = get_gait_type(args)
     
     # Initialize wandb with unique run name for each worker
     wandb.init(
@@ -61,20 +63,21 @@ def quadruped_jump_optimization(args):
             "optimization_method": "optuna-distributed",
             "sampler": "TPE",
             "n_trials": n_trials,
-            "motion_mode": motion_mode
+            "gait_type": gait_type
         }
     )
     
     print(f"Starting worker {worker_id}")
     
-    # Initialize simulation - NO RENDERING for HPC
-    sim_options = SimulationOptions(
-        on_rack=False,  # Whether to suspend the robot in the air (helpful for debugging)
-        render=False,  # CRITICAL: Whether to use the GUI visualizer (must be False for HPC)
-        record_video=False,  # Whether to record a video to file (needs render=True)
-        tracking_camera=False,  # Whether the camera follows the robot (False for HPC)
-    )
-    simulator = QuadSimulator(sim_options)
+    env = QuadrupedGymEnv(render=True,              # visualize
+                on_rack=False,              # useful for debugging! 
+                isRLGymInterface=False,     # not using RL
+                time_step=TIME_STEP,
+                action_repeat=1,
+                motor_control_mode="TORQUE",
+                add_noise=False,    # start in ideal conditions
+                # record_video=True
+                )
 
     # Use shared database storage for distributed optimization
     storage_path = os.path.expanduser(f"~/{args.project_name}.db")
@@ -84,7 +87,7 @@ def quadruped_jump_optimization(args):
     wandbc = WeightsAndBiasesCallback(metric_name="objective_value")
     
     # Create a maximization problem with distributed storage
-    objective = partial(evaluate_jumping, simulator=simulator, motion_mode=motion_mode)
+    objective = partial(evaluate_run, env=env, gait_type=gait_type)
     sampler = optuna.samplers.TPESampler(seed=42 + worker_id)  # Different seed per worker
     study = optuna.create_study(
         study_name="Quadruped_Jumping_Distributed",
@@ -100,7 +103,7 @@ def quadruped_jump_optimization(args):
     study.optimize(objective, n_trials=n_trials, callbacks=[wandbc])
 
     # Close the simulation
-    simulator.close()
+    # simulator.close()
 
     # Log final results to wandb
     final_best_params = study.best_params
@@ -137,85 +140,49 @@ def quadruped_jump_optimization(args):
     wandb.finish()
 
 
-def evaluate_jumping(trial: Trial, simulator: QuadSimulator, motion_mode: str) -> float:
+def evaluate_run(trial: Trial, env: QuadrupedGymEnv, gait_type: str) -> float:
     try:
-        # params = {
-        #     "kpCartesian_1": trial.suggest_float(name="kpCartesian_1", low=100.0, high=1000.0),
-        #     "kpCartesian_2": trial.suggest_float(name="kpCartesian_2", low=100.0, high=1000.0),
-        #     "kpCartesian_3": trial.suggest_float(name="kpCartesian_3", low=100.0, high=1000.0),
-        #     "kdCartesian_1": trial.suggest_float(name="kdCartesian_1", low=10.0, high=300.0),
-        #     "kdCartesian_2": trial.suggest_float(name="kdCartesian_2", low=10.0, high=300.0),
-        #     "kdCartesian_3": trial.suggest_float(name="kdCartesian_3", low=10.0, high=300.0),
-        #     "k_vmc": trial.suggest_float(name="k_vmc", low=100.0, high=400.0),
-        #     "f0": trial.suggest_float(name="f0", low=0.5, high=4.),
-        #     "f1": trial.suggest_float(name="f1", low=0.5, high=4.),
-        #     "Fx": trial.suggest_float(name="Fx", low=30.0, high=200.0),
-        #     "Fy": trial.suggest_float(name="Fy", low=10.0, high=50.0),
-        #     "Fz": trial.suggest_float(name="Fz", low=30.0, high=300.0),
-        #     "nom_x": trial.suggest_float(name="nom_x", low=-0.15, high=0.15),
-        #     "nom_y": trial.suggest_float(name="nom_y", low=simulator.config["com_hip_offset_y"] - 0.15, high=simulator.config["com_hip_offset_y"] + 0.15),
-        #     "nom_z": trial.suggest_float(name="nom_z", low=-0.25-0.1, high=-0.25+0.15),
-        #     "enable_force_profile": True,
-        #     "enable_gravity_compensation": True,
-        #     "enable_virtual_model": True,
-        #     "make_plots": False,
-        #     "n_jumps": 3,
-        #     "jump_duration": 2.0,
-        #     "timestep": 1e-3,
-        # }
         params = {
-            "kpCartesian_1": 500.,
-            "kpCartesian_2": 400.0,
-            "kpCartesian_3": 400.0,
-            "kdCartesian_1": 30.0,
-            "kdCartesian_2": 50.0,
-            "kdCartesian_3": 40.0,
-            "k_vmc": 250.,
-            "f0": trial.suggest_float(name="f0", low=1.5, high=2.5),  # around 2.0
-            "f1": trial.suggest_float(name="f1", low=0.3, high=0.7),  # around 0.5
-            "Fx": trial.suggest_float(name="Fx", low=90.0, high=130.0),  # around 110
-            "Fy": 0.0,
-            "Fz": trial.suggest_float(name="Fz", low=120.0, high=180.0),  # around 150
-            "nom_x": 0.0,
-            "nom_y": simulator.config["com_hip_offset_y"],
-            "nom_z": -0.25,
-            "enable_force_profile": True,
-            "enable_gravity_compensation": True,
-            "enable_virtual_model": True,
-            "n_jumps": 10,
-            "jump_duration": 2.0,
+            "mu": trial.suggest_float(name="mu", low=0.5**2, high=3**2, step=0.25),                 # intrinsic amplitude, converges to sqrt(mu)
+            "omega_swing": trial.suggest_float(name="omega_swing", low=0.25, high=4, step=0.25),   # frequency in swing phase (can edit)
+            "omega_stance": trial.suggest_float(name="omega_stance", low=0.25, high=4, step=0.25),
+            "alpha": 50,                # amplitude convergence factor
+            "des_step_len": 0.05,       # desired step length
+            "sim_duration": 5,
             "timestep": 1e-3,
             "make_plots": False,
             "save_to_csv": False,
+            "gait_type": gait_type,
         }
 
         # Log parameters to wandb
         wandb.log({
             "trial_number": trial.number,
-            "kpCartesian_1": params["kpCartesian_1"],
-            "kpCartesian_3": params["kpCartesian_3"],
-            "kdCartesian_1": params["kdCartesian_1"],
-            "kdCartesian_3": params["kdCartesian_3"],
-            "k_vmc": params["k_vmc"],
-            "f0": params["f0"],
-            "f1": params["f1"],
-            "Fx": params["Fx"],
-            "Fz": params["Fz"],
+            "mu": params["mu"],
+            "omega_swing": params["omega_swing"],
+            "omega_stance": params["omega_stance"],
+            "alpha": params["alpha"],
+            "des_step_len": params["des_step_len"],
+            "sim_duration": params["sim_duration"],
+            "timestep": params["timestep"],
+            "gait_type": params["gait_type"],
         })
 
         # Reset the simulation
-        simulator.reset()
+        env.reset()
 
-        stats_manager = quadruped_jump(simulator, params, motion_mode)
+        cpg_sim = CPGSimulator(env, params)
 
-        total_objective, objective_values = get_objective(simulator, stats_manager)
+        cpg_sim.run()
+
+        total_objective, objective_values = get_objective(env)
 
         # Log results to wandb (replace print statements for HPC)
         wandb.log({
-            "com_pos_x": stats_manager.com_positions[-1][0],
-            "com_pos_y": stats_manager.com_positions[-1][1],
-            "com_pos_z": stats_manager.com_positions[-1][2],
-            "pos_x_objective": objective_values["pos_x_objective"],
+            # "com_pos_x": stats_manager.com_positions[-1][0],
+            # "com_pos_y": stats_manager.com_positions[-1][1],
+            # "com_pos_z": stats_manager.com_positions[-1][2],
+            "vel_x_objective": objective_values["vel_x_objective"],
             "pos_y_objective": objective_values["pos_y_objective"],
             "total_objective": total_objective,
         })
@@ -234,15 +201,15 @@ def evaluate_jumping(trial: Trial, simulator: QuadSimulator, motion_mode: str) -
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Quadruped jump optimization with Optuna")
     parser.add_argument("--n-trials", type=int, default=50, help="Number of optimization trials to run (default: 50)")
-    parser.add_argument("--motion-type", type=str, default="fwd_jump", help="Motion type to be optimized")
-    parser.add_argument("--project_name", type=str, default="quadruped-jump", help="Name of the project")
+    parser.add_argument("--gait-type", type=str, default="TROT", help="Gait type to be optimized")
+    parser.add_argument("--project_name", type=str, default="quadruped_cpg", help="Name of the project")
     
     args = parser.parse_args()
     return args
 
 def main():
     args = parse_arguments()
-    quadruped_jump_optimization(args)
+    quadruped_cpg_optimization(args)
 
 
 if __name__ == "__main__":
