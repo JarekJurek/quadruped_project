@@ -1,48 +1,15 @@
-# SPDX-FileCopyrightText: Copyright (c) 2022 Guillaume Bellegarda. All rights reserved.
-# SPDX-License-Identifier: BSD-3-Clause
-# 
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met:
-#
-# 1. Redistributions of source code must retain the above copyright notice, this
-# list of conditions and the following disclaimer.
-#
-# 2. Redistributions in binary form must reproduce the above copyright notice,
-# this list of conditions and the following disclaimer in the documentation
-# and/or other materials provided with the distribution.
-#
-# 3. Neither the name of the copyright holder nor the names of its
-# contributors may be used to endorse or promote products derived from
-# this software without specific prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#
-# Copyright (c) 2022 EPFL, Guillaume Bellegarda
-
-"""
-Run stable baselines 3 on quadruped env 
-Check the documentation! https://stable-baselines3.readthedocs.io/en/master/
-"""
-
 # misc
 import argparse
 import os
 from datetime import datetime
 
+import wandb
 from stable_baselines3 import PPO, SAC
 from stable_baselines3.common.env_util import make_vec_env
 
 # stable baselines 3
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+from stable_baselines3.common.callbacks import BaseCallback
 
 # gym environment
 from env.quadruped_gym_env import QuadrupedGymEnv
@@ -52,14 +19,59 @@ from utils.file_utils import get_latest_model
 from utils.utils import CheckpointCallback
 
 
-def run_sb3(args):
+class WandbCallback(BaseCallback):
+    """Custom callback for logging to Weights & Biases during training"""
+    
+    def __init__(self, log_freq=1000, verbose=0):
+        super(WandbCallback, self).__init__(verbose)
+        self.log_freq = log_freq
+        
+    def _on_step(self) -> bool:
+        # Log metrics every log_freq steps
+        if self.n_calls % self.log_freq == 0:
+            # Get training metrics from the logger
+            if len(self.logger.name_to_value) > 0:
+                metrics = {}
+                for key, value in self.logger.name_to_value.items():
+                    if isinstance(value, (int, float)):
+                        metrics[key] = value
+                
+                # Add timestep information
+                metrics["timesteps"] = self.num_timesteps
+                metrics["n_calls"] = self.n_calls
+                
+                # Log to wandb
+                wandb.log(metrics)
+        
+        return True
 
+
+def run_sb3(args):
+    # Get worker ID from LSF environment (or default for local testing)
+    worker_id = int(os.getenv('LSB_JOBINDEX', '1'))
+    
+    # Initialize wandb
+    wandb.init(
+        project=args.project_name,
+        name=f"{args.learning_alg}-worker-{worker_id}-{datetime.now().strftime('%m%d%y%H%M%S')}",
+        config={
+            "worker_id": worker_id,
+            "learning_algorithm": args.learning_alg,
+            "num_envs": args.num_envs,
+            "use_gpu": args.use_gpu,
+            "load_existing_model": args.load_nn,
+            "total_timesteps": 1000000,  # You might want to make this configurable
+        }
+    )
 
     # after implementing, you will want to test how well the agent learns with your MDP: 
     # env_configs = {"motor_control_mode":"CPG",
     #                "task_env": "FWD_LOCOMOTION", #  "LR_COURSE_TASK",
     #                "observation_space_mode": "LR_COURSE_OBS"}
     env_configs = {}
+    
+    # Log environment configuration to wandb
+    wandb.config.update({"env_configs": env_configs})
 
     if args.use_gpu and args.learning_alg=="SAC":
         gpu_arg = "auto" 
@@ -67,28 +79,39 @@ def run_sb3(args):
         gpu_arg = "cpu"
 
     if args.load_nn:
-        interm_dir = "./logs/intermediate_models/"
+        interm_dir = f"{args.save_path}/logs/intermediate_models/{args.project_name}"
         log_dir = interm_dir + '' # add path
         stats_path = os.path.join(log_dir, "vec_normalize.pkl")
         model_name = get_latest_model(log_dir)
+        
+        wandb.config.update({
+            "loaded_model_path": model_name,
+            "loaded_stats_path": stats_path
+        })
 
     # directory to save policies and normalization parameters
-    SAVE_PATH = './logs/intermediate_models/'+ datetime.now().strftime("%m%d%y%H%M%S") + '/'
-    os.makedirs(SAVE_PATH, exist_ok=True)
+    save_path = f'{args.save_path}/logs/intermediate_models/{args.project_name}/'+ datetime.now().strftime("%m%d%y%H%M%S") + '/'
+    os.makedirs(save_path, exist_ok=True)
+    
+    # Log save path to wandb
+    wandb.config.update({"model_save_path": save_path})
 
     # checkpoint to save policy network periodically
-    checkpoint_callback = CheckpointCallback(save_freq=30000, save_path=SAVE_PATH,name_prefix='rl_model', verbose=2)
+    checkpoint_callback = CheckpointCallback(save_freq=30000, save_path=save_path,name_prefix='rl_model', verbose=2)
+    
+    # Create wandb callback
+    wandb_callback = WandbCallback(log_freq=1000, verbose=1)
 
     # create Vectorized gym environment
     env = lambda: QuadrupedGymEnv(**env_configs)  
-    env = make_vec_env(env, monitor_dir=SAVE_PATH,n_envs=args.num_envs)
+    env = make_vec_env(env, monitor_dir=save_path,n_envs=args.num_envs)
 
     # normalize observations to stabilize learning (why?)
     env = VecNormalize(env, norm_obs=True, norm_reward=False, clip_obs=100.)
 
     if args.load_nn:
         env = lambda: QuadrupedGymEnv(**env_configs)
-        env = make_vec_env(env, monitor_dir=SAVE_PATH, n_envs=args.num_envs)
+        env = make_vec_env(env, monitor_dir=save_path, n_envs=args.num_envs)
         env = VecNormalize.load(stats_path, env)
 
     # Multi-layer perceptron (MLP) policy of two layers of size _,_ each with tanh activation function
@@ -130,9 +153,12 @@ def run_sb3(args):
                 "seed":None, 
                 "device": gpu_arg}
 
+    # Log hyperparameters to wandb
     if args.learning_alg == "PPO":
+        wandb.config.update({"ppo_config": ppo_config})
         model = PPO('MlpPolicy', env, **ppo_config)
     elif args.learning_alg == "SAC":
+        wandb.config.update({"sac_config": sac_config})
         model = SAC('MlpPolicy', env, **sac_config)
     else:
         raise ValueError(args.learning_alg + ' not implemented')
@@ -143,29 +169,68 @@ def run_sb3(args):
         elif args.learning_alg == "SAC":
             model = SAC.load(model_name, env)
         print("\nLoaded model", model_name, "\n")
+        wandb.log({"model_loaded": True, "loaded_model_name": model_name})
 
     # Learn and save (may need to train for longer)
-    model.learn(total_timesteps=1000000, log_interval=1,callback=checkpoint_callback)
+    try:
+        model.learn(
+            total_timesteps=1000000, 
+            log_interval=1,
+            callback=[checkpoint_callback, wandb_callback]
+        )
+        
+        # Log successful completion
+        wandb.log({"training_completed": True, "final_timesteps": 1000000})
+        
+    except Exception as e:
+        print(f"Training failed with error: {e}")
+        wandb.log({"training_failed": True, "error_message": str(e)})
+        wandb.finish()
+        raise e
 
     # Don't forget to save the VecNormalize statistics when saving the agent
-    model.save( os.path.join(SAVE_PATH, "rl_model" ) ) 
-    env.save(os.path.join(SAVE_PATH, "vec_normalize.pkl" )) 
+    final_model_path = os.path.join(save_path, "rl_model")
+    final_normalize_path = os.path.join(save_path, "vec_normalize.pkl")
+    
+    model.save(final_model_path) 
+    env.save(final_normalize_path)
+    
+    # Log final model paths
+    wandb.log({
+        "final_model_saved": True,
+        "final_model_path": final_model_path,
+        "final_normalize_path": final_normalize_path
+    })
 
     if args.learning_alg == "SAC": # save replay buffer 
-        model.save_replay_buffer(os.path.join(SAVE_PATH,"off_policy_replay_buffer"))
+        replay_buffer_path = os.path.join(save_path,"off_policy_replay_buffer")
+        model.save_replay_buffer(replay_buffer_path)
+        wandb.log({"replay_buffer_saved": True, "replay_buffer_path": replay_buffer_path})
 
+    # Log final summary
+    wandb.log({
+        "worker_completed": True,
+        "total_training_steps": 1000000,
+        "algorithm_used": args.learning_alg
+    })
+
+    # Finish wandb run
+    wandb.finish()
+    
+    print(f"Worker {worker_id} completed successfully.")
 
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(description="Quadruped jump optimization with Optuna")
+    parser = argparse.ArgumentParser(description="Quadruped RL training with Stable Baselines 3")
     parser.add_argument("--n-trials", type=int, default=50, help="Number of optimization trials to run (default: 50)")
     parser.add_argument("--gait-type", type=str, default="TROT", help="Gait type to be optimized")
-    parser.add_argument("--project_name", type=str, default="quadruped_cpg", help="Name of the project")
+    parser.add_argument("--project-name", type=str, default="quadruped_rl", help="Name of the project")
     
     parser.add_argument("--learning-alg", type=str, default="PPO", choices=["PPO", "SAC"], help="Learning algorithm to use (default: PPO)")
     parser.add_argument("--load-nn", action="store_true", help="Initialize training with a previous model")
     parser.add_argument("--num-envs", type=int, default=1, help="Number of pybullet environments to create for data collection (default: 1)")
     parser.add_argument("--use-gpu", action="store_true", help="Use GPU for training (make sure to install all necessary drivers)")
+    parser.add_argument("--save-path", type=str, help="Path for storing intermediate models", default=".")
 
     args = parser.parse_args()
     return args
