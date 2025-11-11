@@ -249,6 +249,7 @@ class QuadrupedGymEnv(gym.Env):
       action_dim = 12
     elif self._motor_control_mode in ["CPG"]:
       action_dim = 8
+      # for simplicity we can disable coupling (remove phi)
     else:
       raise ValueError("motor control mode " + self._motor_control_mode + " not implemented yet.")
     action_high = np.array([1] * action_dim)
@@ -265,6 +266,9 @@ class QuadrupedGymEnv(gym.Env):
       # [TODO] Get observation from robot. What are reasonable measurements we could get on hardware?
       # if using the CPG, you can include states with self._cpg.get_r(), for example
       # 50 is arbitrary
+
+      # WE CAN ADD FOOT CONTACT BOOLEANS AND CPG STATES AS ANOTHER OBSERVATION
+
       self._observation = np.zeros(50)
     else:
       raise ValueError("observation space not defined or not intended")
@@ -311,7 +315,9 @@ class QuadrupedGymEnv(gym.Env):
     """Learn forward locomotion at a desired velocity. """
     vel_tracking_reward = 0.1 * np.clip(self.robot.GetBaseLinearVelocity()[0], 0.2, 1.0)
     # If you want to track a desired velocity 
-    # vel_tracking_reward = 0.05 * np.exp( -1/ 0.25 *  (self.robot.GetBaseLinearVelocity()[0] - des_vel_x)**2 )
+    if des_vel_x is not None:
+      # what about using velocity in the body frame?
+      vel_tracking_reward = 0.05 * np.exp( -1/ 0.25 *  (self.robot.GetBaseLinearVelocity()[0] - des_vel_x)**2 )
     
     # minimize yaw (go straight)
     yaw_reward = -0.2 * np.abs(self.robot.GetBaseOrientationRollPitchYaw()[2]) 
