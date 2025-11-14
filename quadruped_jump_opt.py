@@ -105,14 +105,16 @@ def get_objective(env: QuadrupedGymEnv):
     base_vel_x, base_vel_y, base_vel_z = env.robot.GetBaseLinearVelocity()
     base_roll, base_pitch, base_yaw = env.robot.GetBaseOrientationRollPitchYaw()
 
+    vel_xy_plane = np.sqrt(base_vel_x ** 2 + base_vel_y ** 2)
+
     # Define objective components with weights in a structured way
     objective_config = {
-        "vel_x_objective": {"value": base_vel_x, "weight": 10.0, "description": "Forward velocity"},
-        "pos_y_objective": {
-            "value": -np.abs(base_pos_y),
-            "weight": 5.0,
-            "description": "Penalty for lateral deviation",
-        },
+        "vel_xy_plane": {"value": vel_xy_plane, "weight": 10.0, "description": "Forward velocity"},
+        # "pos_y_objective": {
+        #     "value": -np.abs(base_pos_y),
+        #     "weight": 5.0,
+        #     "description": "Penalty for lateral deviation",
+        # },
         "height_bonus": {
             "value": max(0, base_pos_z - 0.10),
             "weight": 2.0,
@@ -125,11 +127,11 @@ def get_objective(env: QuadrupedGymEnv):
             "weight": 1.0,
             "description": "Huge penalty for z height above 3m",
         },
-        "y_extreme_penalty": {
-            "value": -10000.0 if np.abs(base_pos_y) > 1.0 else 0.0,
-            "weight": 1.0,
-            "description": "Huge penalty for y deviation above 3m",
-        },
+        # "y_extreme_penalty": {
+        #     "value": -10000.0 if np.abs(base_pos_y) > 1.0 else 0.0,
+        #     "weight": 1.0,
+        #     "description": "Huge penalty for y deviation above 3m",
+        # },
     }
 
     # Calculate weighted objectives and total
