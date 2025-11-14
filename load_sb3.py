@@ -28,82 +28,123 @@
 #
 # Copyright (c) 2022 EPFL, Guillaume Bellegarda
 
-import os, sys
-import gymnasium as gym
-import numpy as np
+import argparse
+import os
+import sys
 import time
+from sys import platform
+
+import gymnasium as gym
 import matplotlib
 import matplotlib.pyplot as plt
-from sys import platform
+import numpy as np
+from stable_baselines3 import PPO, SAC
+
+# from stable_baselines3.common.cmd_util import make_vec_env
+from stable_baselines3.common.env_util import (
+    make_vec_env,  # fix for newer versions of stable-baselines3
+)
+
 # may be helpful depending on your system
 # if platform =="darwin": # mac
 #   import PyQt5
 #   matplotlib.use("Qt5Agg")
 # else: # linux
 #   matplotlib.use('TkAgg')
-
 # stable-baselines3
-from stable_baselines3.common.monitor import load_results 
+from stable_baselines3.common.monitor import load_results
 from stable_baselines3.common.vec_env import VecNormalize
-from stable_baselines3 import PPO, SAC
-# from stable_baselines3.common.cmd_util import make_vec_env
-from stable_baselines3.common.env_util import make_vec_env # fix for newer versions of stable-baselines3
 
 # utils
 from env.quadruped_gym_env import QuadrupedGymEnv
-from utils.utils import plot_results
 from utils.file_utils import get_latest_model, load_all_results
+from utils.utils import plot_results
 
-LEARNING_ALG = "PPO" #"SAC"
-interm_dir = "./logs/intermediate_models/"
-# path to saved models, i.e. interm_dir + '102824115106'
-log_dir = interm_dir + ''
 
-# initialize env configs (render at test time)
-# check ideal conditions, as well as robustness to UNSEEN noise during training
-env_config = {}
-env_config['render'] = True
-env_config['record_video'] = False
-env_config['add_noise'] = False 
+def load_sb3(args):
 
-# get latest model and normalization stats, and plot 
-stats_path = os.path.join(log_dir, "vec_normalize.pkl")
-model_name = get_latest_model(log_dir)
-monitor_results = load_results(log_dir)
-print(monitor_results)
-plot_results([log_dir] , 10e10, 'timesteps', LEARNING_ALG + ' ')
-plt.show() 
+    # LEARNING_ALG = "PPO" #"SAC"
+    # interm_dir = "./logs/intermediate_models/"
+    interm_dir = f"{args.save_path}/logs/intermediate_models/{args.project_name}"
+    # path to saved models, i.e. interm_dir + '102824115106'
+    # log_dir = interm_dir + args.model_id
+    log_dir = args.full_path
 
-# reconstruct env 
-env = lambda: QuadrupedGymEnv(**env_config)
-env = make_vec_env(env, n_envs=1)
-env = VecNormalize.load(stats_path, env)
-env.training = False    # do not update stats at test time
-env.norm_reward = False # reward normalization is not needed at test time
+    # initialize env configs (render at test time)
+    # check ideal conditions, as well as robustness to UNSEEN noise during training
+    env_config = {}
+    env_config['render'] = True
+    env_config['record_video'] = args.record_video
+    env_config['add_noise'] = args.add_noise 
 
-# load model
-if LEARNING_ALG == "PPO":
-    model = PPO.load(model_name, env)
-elif LEARNING_ALG == "SAC":
-    model = SAC.load(model_name, env)
-print("\nLoaded model", model_name, "\n")
+    # get latest model and normalization stats, and plot 
+    stats_path = os.path.join(log_dir, "vec_normalize.pkl")
+    model_name = get_latest_model(log_dir)
+    monitor_results = load_results(log_dir)
+    print(monitor_results)
+    plot_results([log_dir] , 10e10, 'timesteps', args.learning_alg + ' ')
+    plt.show() 
 
-obs = env.reset()
-episode_reward = 0
+    # reconstruct env 
+    env = lambda: QuadrupedGymEnv(**env_config)
+    env = make_vec_env(env, n_envs=1)
+    env = VecNormalize.load(stats_path, env)
+    env.training = False    # do not update stats at test time
+    env.norm_reward = False # reward normalization is not needed at test time
 
-# [TODO] initialize arrays to save data from simulation 
+    # load model
+    if args.learning_alg == "PPO":
+        model = PPO.load(model_name, env)
+    elif args.learning_alg == "SAC":
+        model = SAC.load(model_name, env)
+    print("\nLoaded model", model_name, "\n")
 
-for i in range(2000):
-    action, _states = model.predict(obs,deterministic=False) # sample at test time? ([TODO]: test if the outputs make sense)
-    obs, rewards, dones, info = env.step(action)
-    episode_reward += rewards
+    obs = env.reset()
+    episode_reward = 0
+
+    # [TODO] initialize arrays to save data from simulation 
+
+    for i in range(2000):
+        action, _states = model.predict(obs,deterministic=False) # sample at test time? ([TODO]: test if the outputs make sense)
+        obs, rewards, dones, info = env.step(action)
+        episode_reward += rewards
+        
+        if dones:
+            print('episode_reward', episode_reward)
+            print('Final base position', info[0]['base_pos'])
+            episode_reward = 0
+
+        # [TODO] save data from current robot states for plots 
+        # To get base position, for example: env.envs[0].env.robot.GetBasePosition() 
+        
+    # [TODO] make plots
+
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Quadruped RL training with Stable Baselines 3")
+    # parser.add_argument("--n-trials", type=int, default=50, help="Number of optimization trials to run (default: 50)")
+    # parser.add_argument("--gait-type", type=str, default="TROT", help="Gait type to be optimized")
+    parser.add_argument("--project-name", type=str, default="quadruped_rl", help="Name of the project")
+
+    parser.add_argument("--record_video", type=bool, default=False, help="Record video flag")
+    parser.add_argument("--add_noise", type=bool, default=False, help="Add noise flag")
     
-    if dones:
-        print('episode_reward', episode_reward)
-        print('Final base position', info[0]['base_pos'])
-        episode_reward = 0
+    parser.add_argument("--learning-alg", type=str, default="PPO", choices=["PPO", "SAC"], help="Learning algorithm to use (default: PPO)")
+    # parser.add_argument("--load-nn", action="store_true", help="Initialize training with a previous model")
+    # parser.add_argument("--num-envs", type=int, default=1, help="Number of pybullet environments to create for data collection (default: 1)")
+    parser.add_argument("--use-gpu", action="store_true", help="Use GPU for training (make sure to install all necessary drivers)")
+    parser.add_argument("--save-path", type=str, help="Path for storing intermediate models", default=".")
+    parser.add_argument("--model_id", type=str, help="ID of the model to be loaded")
+    parser.add_argument("--full_path", type=str, help="Full path to the model location", required=True)
 
-    # [TODO] save data from current robot states for plots 
-    # To get base position, for example: env.envs[0].env.robot.GetBasePosition() 
-    
-# [TODO] make plots
+
+    args = parser.parse_args()
+    return args
+
+def main():
+    args = parse_arguments()
+    load_sb3(args)
+
+
+if __name__ == "__main__":
+    main()
