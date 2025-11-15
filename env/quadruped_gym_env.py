@@ -269,7 +269,11 @@ class QuadrupedGymEnv(gym.Env):
 
       # WE CAN ADD FOOT CONTACT BOOLEANS AND CPG STATES AS ANOTHER OBSERVATION
 
-      self._observation = np.zeros(50)
+      # self._observation = np.zeros(50)
+      self._observation = np.concatenate((self._cpg.get_r(), 
+                                          self._cpg.get_dr(),
+                                          self._cpg.get_theta(),
+                                          self._cpg.get_dtheta()))
     else:
       raise ValueError("observation space not defined or not intended")
 
@@ -381,18 +385,65 @@ class QuadrupedGymEnv(gym.Env):
     
     return max(reward,0) # keep rewards positive
     
-  def _reward_lr_course(self):
+  def _reward_lr_course(self, des_vel_x=None, des_vel_y=0., des_yaw_rate=0.):
     """ Implement your reward function here. How will you improve upon the above? """
     # [TODO] add your reward function. 
     
-    return 0
+    # vel_tracking_reward = 0.1 * np.clip(self.robot.GetBaseLinearVelocity()[0], 0.2, 1.0)
+    # # If you want to track a desired velocity 
+    # if des_vel_x is not None:
+    #   # what about using velocity in the body frame?
+    #   vel_tracking_reward = 0.05 * np.exp( -1/ 0.25 *  (self.robot.GetBaseLinearVelocity()[0] - des_vel_x)**2 )
+
+    def calculate_reward(des_value, measured_value):
+      return np.exp(-1 / 0.25 * (np.linalg.norm(des_value - measured_value))**2)
+    
+
+    x_vel_reward = calculate_reward(des_vel_x, self.robot.GetBaseLinearVelocity()[0])
+
+    y_vel_reward = calculate_reward(des_vel_y, self.robot.GetBaseLinearVelocity()[1])
+
+    angular_velocity_tracking = calculate_reward(des_yaw_rate, self.robot.GetBaseRollPitchYawRate()[2])
+
+    z_vel_penalty = - self.robot.GetBaseLinearVelocity()[2] ** 2
+
+    base_angular_velocity = self.robot.GetBaseRollPitchYawRate()
+    omega_xy = base_angular_velocity[:2]  # Extract roll rate and pitch rate (x and y components)
+    angular_velocity_penalty = -np.linalg.norm(omega_xy)**2
+
+    # # minimize yaw (go straight)
+    # yaw_reward = -0.2 * np.abs(self.robot.GetBaseOrientationRollPitchYaw()[2]) 
+    
+    # # don't drift laterally 
+    # drift_reward = -0.01 * abs(self.robot.GetBasePosition()[1]) 
+    
+    work_penalty = 0
+    if hasattr(self, '_prev_motor_velocities'):
+        dq_diff = np.array(self._dt_motor_velocities[-1]) - np.array(self._prev_motor_velocities)
+        work_penalty = np.abs(np.dot(self._dt_motor_torques[-1], dq_diff))
+    self._prev_motor_velocities = self._dt_motor_velocities[-1].copy() if self._dt_motor_velocities else np.zeros(12)
+
+    # reward = vel_tracking_reward \
+    #         + yaw_reward \
+    #         + drift_reward \
+    #         - 0.01 * energy_reward \
+    #         - 0.1 * np.linalg.norm(self.robot.GetBaseOrientation() - np.array([0,0,0,1]))
+
+    reward = 0.75 * self._time_step * x_vel_reward \
+            + 0.75 * self._time_step * y_vel_reward \
+            + 0.5 * self._time_step * angular_velocity_tracking \
+            + 2. * self._time_step * z_vel_penalty \
+            + 0.05 * self._time_step * angular_velocity_penalty \
+            + 0.001 * self._time_step * work_penalty \
+
+    return max(reward,0) # keep rewards positive
 
   def _reward(self):
     """ Get reward depending on task"""
     if self._TASK_ENV == "FWD_LOCOMOTION":
-      return self._reward_fwd_locomotion()
+      return self._reward_fwd_locomotion(des_vel_x=None)
     elif self._TASK_ENV == "LR_COURSE_TASK":
-      return self._reward_lr_course()
+      return self._reward_lr_course(des_vel_x=None)
     elif self._TASK_ENV == "FLAGRUN":
       return self._reward_flag_run()
     else:
@@ -476,7 +527,7 @@ class QuadrupedGymEnv(gym.Env):
     u = np.clip(actions,-1,1)
 
     # scale omega to ranges, and set in CPG (range is an example)
-    omega = self._scale_helper( u[0:4], 5, 4.5*2*np.pi)
+    omega = self._scale_helper( u[0:4], 0, 4.5*2*np.pi)
     self._cpg.set_omega_rl(omega)
 
     # scale mu to ranges, and set in CPG (squared since we converge to the sqrt in the CPG amplitude)
@@ -512,10 +563,13 @@ class QuadrupedGymEnv(gym.Env):
       
       # Add joint PD contribution to tau
       tau = np.zeros(3) # [TODO]
-      tau += kp * (q_des - q[3*i:3*i+3]) + kd * (0 - dq[3*i:3*i+3])
+      tau += kp @ (q_des - q[3*i:3*i+3]) + kd @ (-dq[3*i:3*i+3])
 
       # add Cartesian PD contribution (as you wish)
-      # tau +=
+      _, des_xyz_leg_pos = self.env.robot.ComputeJacobianAndPosition(legID=i, specific_q=q_des)
+      J, pos_leg_frame = self.env.robot.ComputeJacobianAndPosition(i)
+      foot_lin_vel_leg_frame = J @ dq[3*i:3*i+3]
+      tau += J.T @ (self.kpCartesian @ (des_xyz_leg_pos - pos_leg_frame) + self.kdCartesian @ (-foot_lin_vel_leg_frame))
       
       action[3*i:3*i+3] = tau
 
