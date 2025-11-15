@@ -51,7 +51,7 @@ class HopfNetwork():
                 omega_swing=5*2*np.pi,   # frequency in swing phase (can edit)
                 omega_stance=2*2*np.pi,  # frequency in stance phase (can edit)
                 gait="TROT",             # Gait, can be TROT, WALK, PACE, BOUND, etc.
-                alpha=50,                # amplitude convergence factor
+                alpha=150,                # amplitude convergence factor
                 coupling_strength=1,     # coefficient to multiply coupling matrix
                 couple=True,             # whether oscillators should be coupled
                 time_step=0.001,         # time step 
@@ -235,9 +235,9 @@ class HopfNetwork():
       # get r_i, theta_i from X
       r, theta = X[:,i]
       # amplitude (use mu from RL, i.e. self._mu_rl[i])
-      r_dot = 0  # [TODO]
+      r_dot = r_dot = self._alpha * (self._mu_rl[i] - r ** 2)  # [TODO]
       # phase (use omega from RL, i.e. self._omega_rl[i])
-      theta_dot = 0 # [TODO]
+      theta_dot = self._omega_rl[i] # [TODO]
 
       X_dot[:,i] = [r_dot, theta_dot]
 
