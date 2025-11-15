@@ -65,10 +65,15 @@ def run_sb3(args):
     )
 
     # after implementing, you will want to test how well the agent learns with your MDP: 
-    # env_configs = {"motor_control_mode":"CPG",
-    #                "task_env": "FWD_LOCOMOTION", #  "LR_COURSE_TASK",
-    #                "observation_space_mode": "LR_COURSE_OBS"}
     env_configs = {}
+
+    env_configs = {"motor_control_mode":"CPG",
+                #    "task_env": "FWD_LOCOMOTION",
+                   "task_env": "LR_COURSE_TASK",
+                   "observation_space_mode": "LR_COURSE_OBS",
+                   "timestep": args.time_step,
+                   "max_episode_length": args.max_episode_length,
+                   "randomize_cpg_params": args.randomize_cpg_params,}
     
     # Log environment configuration to wandb
     wandb.config.update({"env_configs": env_configs})
@@ -211,7 +216,10 @@ def run_sb3(args):
     wandb.log({
         "worker_completed": True,
         "total_training_steps": 1000000,
-        "algorithm_used": args.learning_alg
+        "algorithm_used": args.learning_alg,
+        "cpg_h": env.cpg_h_container,
+        "cpg_g_c": env.cpg_g_c_container,
+        "des_vel_x": env.des_vel_x_container,
     })
 
     # Finish wandb run
@@ -222,7 +230,6 @@ def run_sb3(args):
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Quadruped RL training with Stable Baselines 3")
-    parser.add_argument("--n-trials", type=int, default=50, help="Number of optimization trials to run (default: 50)")
     parser.add_argument("--gait-type", type=str, default="TROT", help="Gait type to be optimized")
     parser.add_argument("--project-name", type=str, default="quadruped_rl", help="Name of the project")
     
@@ -231,6 +238,9 @@ def parse_arguments():
     parser.add_argument("--num-envs", type=int, default=1, help="Number of pybullet environments to create for data collection (default: 1)")
     parser.add_argument("--use-gpu", action="store_true", help="Use GPU for training (make sure to install all necessary drivers)")
     parser.add_argument("--save-path", type=str, help="Path for storing intermediate models", default=".")
+    parser.add_argument("--time_step", type=float, default=0.001, help="time step")
+    parser.add_argument("--max_episode_length", type=float, default=20., help="max episode lenght")
+    parser.add_argument("--randomize_cpg_params", type=bool, default=True, help="Whether to randomize cpg params")
 
     args = parser.parse_args()
     return args
