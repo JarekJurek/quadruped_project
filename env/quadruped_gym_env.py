@@ -512,7 +512,7 @@ class QuadrupedGymEnv(gym.Env):
       
       # Add joint PD contribution to tau
       tau = np.zeros(3) # [TODO]
-      tau += self.kp * (q_des - q[3*i:3*i+3]) + self.kd * (0 - dq[3*i:3*i+3])
+      tau += kp * (q_des - q[3*i:3*i+3]) + kd * (0 - dq[3*i:3*i+3])
 
       # add Cartesian PD contribution (as you wish)
       # tau +=
