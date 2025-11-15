@@ -141,7 +141,9 @@ class QuadrupedGymEnv(gym.Env):
       record_video=False,
       add_noise=True,
       terrain=None,
-      test_flagrun=False, 
+      test_flagrun=False,
+      max_episode_length=20.,
+      randomize_cpg_params=False,
       **kwargs): # any extra arguments from legacy
     """Initialize the quadruped gym environment.
     Args:
@@ -188,10 +190,27 @@ class QuadrupedGymEnv(gym.Env):
     self._test_flagrun = test_flagrun
     self.goal_id = None
     self._terrain = terrain
+    self._max_episode_length = max_episode_length
     if self._add_noise:
       self._observation_noise_stdev = 0.01 #
     else:
       self._observation_noise_stdev = 0.0
+
+    self._randomize_cpg_params = randomize_cpg_params
+    self._h_min = 0.1,
+    self._h_max = 0.3,
+    self._g_c_min = 0.02, 
+    self._g_c_max = 0.2,
+
+    self.cpg_h_container = []
+    self.cpg_g_c_container = []
+
+    self._des_vel_x = 0.1
+    self._des_vel_x_min = 0.01
+    self._des_vel_x_max = 1.0
+    self.des_vel_x_container = []
+
+    self._sample_vel_interval = 5.0
 
     # other bookkeeping 
     self._num_bullet_solver_iterations = int(300 / action_repeat) 
@@ -199,7 +218,7 @@ class QuadrupedGymEnv(gym.Env):
     self._sim_step_counter = 0
     self._last_base_position = [0, 0, 0]
     self._last_frame_time = 0.0 # for rendering 
-    self._MAX_EP_LEN = EPISODE_LENGTH # max sim time in seconds, arbitrary
+    self._MAX_EP_LEN = self._max_episode_length # max sim time in seconds, arbitrary
     self._action_bound = 1.0
 
     # if using CPG
@@ -235,8 +254,37 @@ class QuadrupedGymEnv(gym.Env):
       # [TODO] Set observation upper and lower ranges. What are reasonable limits? 
       # Note 50 is arbitrary below, you may have more or less
       # If using CPG-RL, remember to include limits on these
-      observation_high = (np.zeros(50) + OBSERVATION_EPS)
-      observation_low = (np.zeros(50) -  OBSERVATION_EPS)
+      # observation_high = (np.zeros(50) + OBSERVATION_EPS)
+      # observation_low = (np.zeros(50) -  OBSERVATION_EPS)
+
+      # CPG state dimensions: r (4), dr (4), theta (4), dtheta (4) = 16 total
+      # Reasonable bounds for each component:
+      
+      # r (amplitudes): typically [0, 2] based on MU_LOW and MU_UPP
+      r_high = np.array([MU_UPP] * 4)
+      r_low = np.array([MU_LOW] * 4)
+      
+      # dr (amplitude derivatives): reasonable derivative bounds
+      dr_high = np.array([5.0] * 4)  
+      dr_low = np.array([-5.0] * 4)
+      
+      # theta (phases): phases are typically in [0, 2π] but can be unbounded due to wrapping
+      # For RL, it's better to use [-π, π] or a larger range to handle phase wrapping
+      theta_high = np.array([2 * np.pi] * 4)
+      theta_low = np.array([-2 * np.pi] * 4)
+      
+      # dtheta (phase derivatives/frequencies): angular velocities
+      # Based on omega ranges in ScaleActionToCPGStateModulations: [0, 4.5*2*π]
+      dtheta_high = np.array([4.5 * 2 * np.pi] * 4)  # ~28.3 rad/s
+      dtheta_low = np.array([-4.5 * 2 * np.pi] * 4)
+      
+      observation_high = np.concatenate((r_high, dr_high, theta_high, dtheta_high)) + OBSERVATION_EPS
+      observation_low = np.concatenate((r_low, dr_low, theta_low, dtheta_low)) - OBSERVATION_EPS
+
+      # self._observation = np.concatenate((self._cpg.get_r(), 
+      #                                     self._cpg.get_dr(),
+      #                                     self._cpg.get_theta(),
+      #                                     self._cpg.get_dtheta()))
     
     else:
       raise ValueError("observation space not defined or not intended")
@@ -443,7 +491,7 @@ class QuadrupedGymEnv(gym.Env):
     if self._TASK_ENV == "FWD_LOCOMOTION":
       return self._reward_fwd_locomotion(des_vel_x=None)
     elif self._TASK_ENV == "LR_COURSE_TASK":
-      return self._reward_lr_course(des_vel_x=None)
+      return self._reward_lr_course(des_vel_x=self._des_vel_x)
     elif self._TASK_ENV == "FLAGRUN":
       return self._reward_flag_run()
     else:
@@ -600,6 +648,9 @@ class QuadrupedGymEnv(gym.Env):
       if self._is_render:
         self._render_step_helper()
 
+    if self.get_sim_time() % self._sample_vel_interval < self._time_step * self._action_repeat:
+      self.sample_vel_command()
+
     self._last_action = curr_act
     self._env_step_counter += 1
     reward = self._reward()
@@ -625,7 +676,11 @@ class QuadrupedGymEnv(gym.Env):
 
     # Update seed
     self.seed(seed)
-    
+
+    # Randomize CPG parameters for domain randomization
+    if self._randomize_cpg_params:
+      self._randomize_cpg_parameters()
+
     # Disable rendering when setting up models (otherwise too slow)
     if self._is_render:
       self._pybullet_client.configureDebugVisualizer(pybullet.COV_ENABLE_RENDERING, 0)
@@ -703,6 +758,27 @@ class QuadrupedGymEnv(gym.Env):
       self.recordVideoHelper()
     
     return self._noisy_observation(), self._get_info()
+  
+  def sample_vel_command(self):
+    self._des_vel_x = np.random.uniform(self._h_min, self._h_max)
+    self.des_vel_x_container.append(self._des_vel_x)
+  
+  def _randomize_cpg_parameters(self):
+    """Randomize CPG height and ground clearance parameters for domain randomization."""
+    
+    # Generate random values
+    random_height = np.random.uniform(self._h_min, self._h_max)
+    random_ground_clearance = np.random.uniform(self._g_c_min, self._g_c_max)
+
+    self.cpg_h_container.append(random_height)
+    self.cpg_g_c_container.append(random_ground_clearance)
+    
+    # Update CPG parameters
+    self._cpg._robot_height = random_height
+    self._cpg._ground_clearance = random_ground_clearance
+    
+    if self._is_render:
+        print(f'Randomized CPG - Height: {random_height:.3f}, Ground Clearance: {random_ground_clearance:.3f}')
 
   def _reset_goal(self):
     """Reset goal location for flagrun."""
