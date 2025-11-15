@@ -43,7 +43,7 @@ from matplotlib import pyplot as plt
 from env.hopf_network import HopfNetwork
 from env.quadruped_gym_env import QuadrupedGymEnv
 
-ADD_CARTESIAN_PD = False
+ADD_CARTESIAN_PD = True
 TIME_STEP = 0.001
 foot_y = 0.0838 # this is the hip length 
 sideSign = np.array([-1, 1, -1, 1]) # get correct hip sign (body right is negative)
@@ -90,12 +90,12 @@ class CPGSimulator():
 
   def initialize_pd_gains(self):
     # Joint PD gains
-    self.kp=np.array([100,100,100])
-    self.kd=np.array([2,2,2])
+    self.kp=np.diag([100,100,100])
+    self.kd=np.diag([2,2,2])
 
     # Cartesian PD gains
-    self.kpCartesian = np.array([500, 400, 400])
-    self.kdCartesian = np.array([30, 50, 40])
+    self.kpCartesian = np.diag([500, 400, 400])
+    self.kdCartesian = np.diag([30, 50, 40])
 
   def initialize_state_arrays(self):
       self.cpg_r, self.cpg_theta, self.cpg_r_dot, self.cpg_theta_dot = [np.zeros((4, self.test_steps)) for i in range(4)]
@@ -136,12 +136,14 @@ class CPGSimulator():
         self.desired_joint_angles[3*i:3*i+3, j] = leg_q
 
         # Add joint PD contribution to tau for leg i (Equation 4)
-        tau += self.kp * (leg_q - q[3*i:3*i+3]) + self.kd * (0 - dq[3*i:3*i+3]) # [TODO] 
+        tau += self.kp @ (leg_q - q[3*i:3*i+3]) + self.kd @ (-dq[3*i:3*i+3]) # [TODO] 
 
         # add Cartesian PD contribution
         if ADD_CARTESIAN_PD:
           # Get desired xyz position in leg frame (use ComputeJacobianAndPosition with the joint angles you just found above)
-          # [TODO] 
+          # [TODO]
+
+          _, des_xyz_leg_pos = self.env.robot.ComputeJacobianAndPosition(legID=i, specific_q=leg_q)
 
           # Get current Jacobian and foot position in leg frame (see ComputeJacobianAndPosition() in quadruped.py)
           J, pos_leg_frame = self.env.robot.ComputeJacobianAndPosition(i)
@@ -150,7 +152,7 @@ class CPGSimulator():
           foot_lin_vel_leg_frame = J @ dq[3*i:3*i+3]
 
           # Calculate torque contribution from Cartesian PD (Equation 5) [Make sure you are using matrix multiplications]
-          tau += J.T @ (self.kpCartesian @ (leg_xyz - pos_leg_frame) + self.kdCartesian @ (0 - foot_lin_vel_leg_frame)) # [TODO]
+          tau += J.T @ (self.kpCartesian @ (des_xyz_leg_pos - pos_leg_frame) + self.kdCartesian @ (-foot_lin_vel_leg_frame)) # [TODO]
 
         # Get actual foot position and store it
         _, actual_pos_leg_frame = self.env.robot.ComputeJacobianAndPosition(i)
