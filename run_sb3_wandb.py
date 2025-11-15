@@ -230,7 +230,6 @@ def run_sb3(args):
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Quadruped RL training with Stable Baselines 3")
-    parser.add_argument("--gait-type", type=str, default="TROT", help="Gait type to be optimized")
     parser.add_argument("--project-name", type=str, default="quadruped_rl", help="Name of the project")
     
     parser.add_argument("--learning-alg", type=str, default="PPO", choices=["PPO", "SAC"], help="Learning algorithm to use (default: PPO)")

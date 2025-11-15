@@ -105,6 +105,9 @@ VELOCITY_LIMITS = np.asarray( [21.0] * NUM_MOTORS )
 MOTOR_KP = [100.0, 100.0, 100.0] * NUM_LEGS
 MOTOR_KD = [2.0, 2.0, 2.0] * NUM_LEGS
 
+kp = np.diag([100.,100.,100.])
+kd = np.diag([2.,2.,2.])
+
 # MOTOR_KP = [55,55,55] * NUM_LEGS
 # MOTOR_KD = [0.8,0.8,0.8] * NUM_LEGS
 

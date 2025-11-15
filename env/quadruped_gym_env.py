@@ -451,11 +451,11 @@ class QuadrupedGymEnv(gym.Env):
 
     y_vel_reward = calculate_reward(des_vel_y, self.robot.GetBaseLinearVelocity()[1])
 
-    angular_velocity_tracking = calculate_reward(des_yaw_rate, self.robot.GetBaseRollPitchYawRate()[2])
+    angular_velocity_tracking = calculate_reward(des_yaw_rate, self.robot.GetTrueBaseRollPitchYawRate()[2])
 
     z_vel_penalty = - self.robot.GetBaseLinearVelocity()[2] ** 2
 
-    base_angular_velocity = self.robot.GetBaseRollPitchYawRate()
+    base_angular_velocity = self.robot.GetTrueBaseRollPitchYawRate()
     omega_xy = base_angular_velocity[:2]  # Extract roll rate and pitch rate (x and y components)
     angular_velocity_penalty = -np.linalg.norm(omega_xy)**2
 
@@ -607,17 +607,17 @@ class QuadrupedGymEnv(gym.Env):
 
       # call inverse kinematics to get corresponding joint angles
       q_des = np.zeros(3) # [TODO]
-      q_des = self.env.robot.ComputeInverseKinematics(i, [x, y, z])
+      q_des = self.robot.ComputeInverseKinematics(i, [x, y, z])
       
       # Add joint PD contribution to tau
       tau = np.zeros(3) # [TODO]
-      tau += kp @ (q_des - q[3*i:3*i+3]) + kd @ (-dq[3*i:3*i+3])
+      tau += robot_config.kp @ (q_des - q[3*i:3*i+3]) + robot_config.kd @ (-dq[3*i:3*i+3])
 
       # add Cartesian PD contribution (as you wish)
-      _, des_xyz_leg_pos = self.env.robot.ComputeJacobianAndPosition(legID=i, specific_q=q_des)
-      J, pos_leg_frame = self.env.robot.ComputeJacobianAndPosition(i)
+      _, des_xyz_leg_pos = self.robot.ComputeJacobianAndPosition(legID=i, specific_q=q_des)
+      J, pos_leg_frame = self.robot.ComputeJacobianAndPosition(i)
       foot_lin_vel_leg_frame = J @ dq[3*i:3*i+3]
-      tau += J.T @ (self.kpCartesian @ (des_xyz_leg_pos - pos_leg_frame) + self.kdCartesian @ (-foot_lin_vel_leg_frame))
+      tau += J.T @ (robot_config.kpCartesian @ (des_xyz_leg_pos - pos_leg_frame) + robot_config.kdCartesian @ (-foot_lin_vel_leg_frame))
       
       action[3*i:3*i+3] = tau
 
