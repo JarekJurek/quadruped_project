@@ -123,28 +123,60 @@ def run_sb3(args):
 
     # Multi-layer perceptron (MLP) policy of two layers of size _,_ each with tanh activation function
     # policy_kwargs = dict(net_arch=[256,256]) # act_fun=tf.nn.tanh
-    policy_kwargs = dict(net_arch=[512, 256, 128], act_fun=torch.nn.modules.activation.ELU)
+    policy_kwargs = dict(net_arch=[512, 256, 128], activation_fn=torch.nn.modules.activation.ELU)
 
     # What are these hyperparameters? Check here: https://stable-baselines3.readthedocs.io/en/master/modules/ppo.html
-    n_steps = 4096 
+    # n_steps = 4096 
     learning_rate = lambda f: 1e-4 
-    ppo_config = {  "gamma":0.99, 
-                    "n_steps": int(n_steps/args.num_envs), 
-                    "ent_coef":args.ent_coef, 
-                    "learning_rate":learning_rate, 
-                    "vf_coef":0.5,
-                    "max_grad_norm":0.5, 
-                    "gae_lambda":0.95, 
-                    "batch_size":128,
-                    "n_epochs":args.n_epochs, 
-                    "clip_range":args.clip_range, 
-                    "clip_range_vf":1,
-                    "verbose":1, 
-                    "tensorboard_log":None, 
-                    "_init_setup_model":True, 
-                    "policy_kwargs":policy_kwargs,
-                    "target_kl": args.des_kl_divergence,
-                    "device": gpu_arg}
+    # ppo_config = {  "gamma":0.99, 
+    #                 "n_steps": int(n_steps/args.num_envs), 
+    #                 "ent_coef":args.ent_coef, 
+    #                 "learning_rate":learning_rate, 
+    #                 "vf_coef":0.5,
+    #                 "max_grad_norm":0.5, 
+    #                 "gae_lambda":0.95, 
+    #                 "batch_size":128,
+    #                 "n_epochs":args.n_epochs, 
+    #                 "clip_range":args.clip_range, 
+    #                 "clip_range_vf":1,
+    #                 "verbose":1, 
+    #                 "tensorboard_log":None, 
+    #                 "_init_setup_model":True, 
+    #                 "policy_kwargs":policy_kwargs,
+    #                 "target_kl": args.des_kl_divergence,
+    #                 "device": gpu_arg}
+    n_steps = args.n_steps                 # timesteps per env per update (e.g. 24)
+    learning_rate = lambda f: 1e-4
+
+    total_rollout = n_steps * args.num_envs
+    # minibatch_size = args.num_envs * args.mini_batch_multiplier  # e.g. 4096 * 6 = 24576
+    # assert total_rollout % minibatch_size == 0, (
+    #     f"total_rollout ({total_rollout}) must be divisible by minibatch_size ({minibatch_size})"
+    # )
+    assert total_rollout % args.n_mini_batch == 0, (
+        f"total_rollout ({total_rollout}) must be divisible by n_mini_batch ({args.n_mini_batch})"
+    )
+    minibatch_size = total_rollout // args.n_mini_batch
+
+    ppo_config = {
+        "gamma": args.discount,
+        "n_steps": n_steps,                      # steps per env
+        "ent_coef": args.ent_coef,
+        "learning_rate": learning_rate,
+        "vf_coef": 0.5,
+        "max_grad_norm": 0.5,
+        "gae_lambda": args.gae_discount,
+        "batch_size": int(minibatch_size),            # SB3 minibatch size
+        "n_epochs": args.n_epochs,
+        "clip_range": args.clip_range,
+        "clip_range_vf": 1,
+        "verbose": 1,
+        "tensorboard_log": None,
+        "_init_setup_model": True,
+        "policy_kwargs": policy_kwargs,
+        "target_kl": args.des_kl_divergence,
+        "device": gpu_arg,
+    }
 
     # What are these hyperparameters? Check here: https://stable-baselines3.readthedocs.io/en/master/modules/sac.html
     sac_config={"learning_rate":1e-4,
@@ -246,15 +278,14 @@ def parse_arguments():
     parser.add_argument("--randomize_cpg_params", type=bool, default=True, help="Whether to randomize cpg params")
 
     parser.add_argument("--batch_multiplier", type=int, default=24, help="Batch size multiplier")
-    parser.add_argument("--mini_batch_multiplier", type=int, default=6, help="Mini batch size multiplier")
+    parser.add_argument("--n_mini_batch", type=int, default=4, help="Number of minibatch")
     parser.add_argument("--n_epochs", type=int, default=5, help="Number of epochs in PPO")
     parser.add_argument("--clip_range", type=float, default=0.2, help="Clip range in PPO")
     parser.add_argument("--ent_coef", type=float, default=0.01, help="Entropy coefficient in PPO")
     parser.add_argument("--discount", type=float, default=0.99, help="Discount factor in PPO")
     parser.add_argument("--gae_discount", type=float, default=0.95, help="GAE discount factor in PPO")
     parser.add_argument("--des_kl_divergence", type=float, default=0.01, help="Desired KL divergence in PPO")
-    parser.add_argument("--hidden_layers", type=int, default=3, help="Hidden layers in PPO")
-    parser.add_argument("--hidden_layers", type=int, default=3, help="Hidden layers in PPO")
+    parser.add_argument("--n_steps", type=int, default=24, help="Number of steps per environment per update in PPO")
     
 
     args = parser.parse_args()
