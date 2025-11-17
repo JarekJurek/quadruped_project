@@ -130,19 +130,20 @@ def run_sb3(args):
     learning_rate = lambda f: 1e-4 
     ppo_config = {  "gamma":0.99, 
                     "n_steps": int(n_steps/args.num_envs), 
-                    "ent_coef":0.0, 
+                    "ent_coef":args.ent_coef, 
                     "learning_rate":learning_rate, 
                     "vf_coef":0.5,
                     "max_grad_norm":0.5, 
                     "gae_lambda":0.95, 
                     "batch_size":128,
-                    "n_epochs":10, 
-                    "clip_range":0.2, 
+                    "n_epochs":args.n_epochs, 
+                    "clip_range":args.clip_range, 
                     "clip_range_vf":1,
                     "verbose":1, 
                     "tensorboard_log":None, 
                     "_init_setup_model":True, 
                     "policy_kwargs":policy_kwargs,
+                    "target_kl": args.des_kl_divergence,
                     "device": gpu_arg}
 
     # What are these hyperparameters? Check here: https://stable-baselines3.readthedocs.io/en/master/modules/sac.html
@@ -246,8 +247,9 @@ def parse_arguments():
 
     parser.add_argument("--batch_multiplier", type=int, default=24, help="Batch size multiplier")
     parser.add_argument("--mini_batch_multiplier", type=int, default=6, help="Mini batch size multiplier")
-    parser.add_argument("--epochs", type=int, default=5, help="Number of epochs in PPO")
+    parser.add_argument("--n_epochs", type=int, default=5, help="Number of epochs in PPO")
     parser.add_argument("--clip_range", type=float, default=0.2, help="Clip range in PPO")
+    parser.add_argument("--ent_coef", type=float, default=0.01, help="Entropy coefficient in PPO")
     parser.add_argument("--discount", type=float, default=0.99, help="Discount factor in PPO")
     parser.add_argument("--gae_discount", type=float, default=0.95, help="GAE discount factor in PPO")
     parser.add_argument("--des_kl_divergence", type=float, default=0.01, help="Desired KL divergence in PPO")
