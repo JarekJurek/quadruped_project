@@ -18,6 +18,8 @@ from utils.file_utils import get_latest_model
 # utils
 from utils.utils import CheckpointCallback
 
+import torch
+
 
 class WandbCallback(BaseCallback):
     """Custom callback for logging to Weights & Biases during training"""
@@ -120,7 +122,8 @@ def run_sb3(args):
         env = VecNormalize.load(stats_path, env)
 
     # Multi-layer perceptron (MLP) policy of two layers of size _,_ each with tanh activation function
-    policy_kwargs = dict(net_arch=[256,256]) # act_fun=tf.nn.tanh
+    # policy_kwargs = dict(net_arch=[256,256]) # act_fun=tf.nn.tanh
+    policy_kwargs = dict(net_arch=[512, 256, 128], act_fun=torch.nn.modules.activation.ELU)
 
     # What are these hyperparameters? Check here: https://stable-baselines3.readthedocs.io/en/master/modules/ppo.html
     n_steps = 4096 
