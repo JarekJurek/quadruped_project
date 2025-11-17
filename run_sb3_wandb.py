@@ -237,9 +237,20 @@ def parse_arguments():
     parser.add_argument("--num-envs", type=int, default=1, help="Number of pybullet environments to create for data collection (default: 1)")
     parser.add_argument("--use-gpu", action="store_true", help="Use GPU for training (make sure to install all necessary drivers)")
     parser.add_argument("--save-path", type=str, help="Path for storing intermediate models", default=".")
-    parser.add_argument("--time_step", type=float, default=0.001, help="time step")
+    parser.add_argument("--time_step", type=float, default=0.01, help="time step")
     parser.add_argument("--max_episode_length", type=float, default=20., help="max episode lenght")
     parser.add_argument("--randomize_cpg_params", type=bool, default=True, help="Whether to randomize cpg params")
+
+    parser.add_argument("--batch_multiplier", type=int, default=24, help="Batch size multiplier")
+    parser.add_argument("--mini_batch_multiplier", type=int, default=6, help="Mini batch size multiplier")
+    parser.add_argument("--epochs", type=int, default=5, help="Number of epochs in PPO")
+    parser.add_argument("--clip_range", type=float, default=0.2, help="Clip range in PPO")
+    parser.add_argument("--discount", type=float, default=0.99, help="Discount factor in PPO")
+    parser.add_argument("--gae_discount", type=float, default=0.95, help="GAE discount factor in PPO")
+    parser.add_argument("--des_kl_divergence", type=float, default=0.01, help="Desired KL divergence in PPO")
+    parser.add_argument("--hidden_layers", type=int, default=3, help="Hidden layers in PPO")
+    parser.add_argument("--hidden_layers", type=int, default=3, help="Hidden layers in PPO")
+    
 
     args = parser.parse_args()
     return args
