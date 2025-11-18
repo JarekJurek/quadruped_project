@@ -107,7 +107,7 @@ def load_sb3(args):
 
     # [TODO] initialize arrays to save data from simulation 
 
-    for i in range(2000):
+    for i in range(args.sim_time):
         action, _states = model.predict(obs,deterministic=False) # sample at test time? ([TODO]: test if the outputs make sense)
         obs, rewards, dones, info = env.step(action)
         episode_reward += rewards
@@ -125,22 +125,18 @@ def load_sb3(args):
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Quadruped RL training with Stable Baselines 3")
-    # parser.add_argument("--n-trials", type=int, default=50, help="Number of optimization trials to run (default: 50)")
-    # parser.add_argument("--gait-type", type=str, default="TROT", help="Gait type to be optimized")
     parser.add_argument("--project-name", type=str, default="quadruped_rl", help="Name of the project")
 
     parser.add_argument("--record_video", type=bool, default=False, help="Record video flag")
     parser.add_argument("--add_noise", type=bool, default=False, help="Add noise flag")
+
+    parser.add_argument("--sim_time", type=int, default=5000, help="Duration of the simulation in miliseconds (has to be integer)")
     
     parser.add_argument("--learning-alg", type=str, default="PPO", choices=["PPO", "SAC"], help="Learning algorithm to use (default: PPO)")
-    parser.add_argument("--motor_control_mode", type=str, default="CPG", choices=["CPG", "PD","TORQUE", "CARTESIAN_PD"], help="Learning algorithm to use (default: PPO)")
+    parser.add_argument("--motor_control_mode", type=str, default="CPG", choices=["CPG", "PD","TORQUE", "CARTESIAN_PD"], help="Motor control mode")
     parser.add_argument("--observation_space_mode", type=str, default="LR_COURSE_OBS", choices=["DEFAULT", "LR_COURSE_OBS"], help="Observation space mode")
     parser.add_argument("--task_env", type=str, default="LR_COURSE_TASK", choices=["LR_COURSE_TASK", "FLAGRUN","FWD_LOCOMOTION"], help="Task to be executed")
-    # parser.add_argument("--load-nn", action="store_true", help="Initialize training with a previous model")
-    # parser.add_argument("--num-envs", type=int, default=1, help="Number of pybullet environments to create for data collection (default: 1)")
-    parser.add_argument("--use-gpu", action="store_true", help="Use GPU for training (make sure to install all necessary drivers)")
     parser.add_argument("--save-path", type=str, help="Path for storing intermediate models", default=".")
-    parser.add_argument("--model_id", type=str, help="ID of the model to be loaded")
     parser.add_argument("--full_path", type=str, help="Full path to the model location", required=True)
 
 
