@@ -51,11 +51,17 @@ class WandbCallback(BaseCallback):
 def run_sb3(args):
     # Get worker ID from LSF environment (or default for local testing)
     worker_id = int(os.getenv('LSB_JOBINDEX', '1'))
+
+    timestamp = datetime.now().strftime('%m%d%y%H%M%S')
+    wandb_dir = os.path.join(args.save_path, "wandb_runs", f"{args.project_name}-worker-{worker_id}-{timestamp}")
+    os.makedirs(wandb_dir, exist_ok=True)
+    os.environ["WANDB_DIR"] = wandb_dir
     
     # Initialize wandb
     wandb.init(
         project=args.project_name,
         name=f"{args.learning_alg}-worker-{worker_id}-{datetime.now().strftime('%m%d%y%H%M%S')}",
+        dir=wandb_dir,
         config={
             "worker_id": worker_id,
             "learning_algorithm": args.learning_alg,

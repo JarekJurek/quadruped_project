@@ -133,9 +133,9 @@ class QuadrupedGymEnv(gym.Env):
       isRLGymInterface=True,
       time_step=0.001,
       action_repeat=10,  
-      motor_control_mode="PD",
-      task_env="FWD_LOCOMOTION",
-      observation_space_mode="DEFAULT",
+      motor_control_mode="CPG",
+      task_env="LR_COURSE_TASK",
+      observation_space_mode="LR_COURSE_OBS",
       on_rack=False,
       render=False,
       record_video=False,
@@ -280,11 +280,6 @@ class QuadrupedGymEnv(gym.Env):
       
       observation_high = np.concatenate((r_high, dr_high, theta_high, dtheta_high)) + OBSERVATION_EPS
       observation_low = np.concatenate((r_low, dr_low, theta_low, dtheta_low)) - OBSERVATION_EPS
-
-      # self._observation = np.concatenate((self._cpg.get_r(), 
-      #                                     self._cpg.get_dr(),
-      #                                     self._cpg.get_theta(),
-      #                                     self._cpg.get_dtheta()))
     
     else:
       raise ValueError("observation space not defined or not intended")
@@ -458,24 +453,12 @@ class QuadrupedGymEnv(gym.Env):
     base_angular_velocity = self.robot.GetTrueBaseRollPitchYawRate()
     omega_xy = base_angular_velocity[:2]  # Extract roll rate and pitch rate (x and y components)
     angular_velocity_penalty = -np.linalg.norm(omega_xy)**2
-
-    # # minimize yaw (go straight)
-    # yaw_reward = -0.2 * np.abs(self.robot.GetBaseOrientationRollPitchYaw()[2]) 
-    
-    # # don't drift laterally 
-    # drift_reward = -0.01 * abs(self.robot.GetBasePosition()[1]) 
     
     work_penalty = 0
     if hasattr(self, '_prev_motor_velocities'):
         dq_diff = np.array(self._dt_motor_velocities[-1]) - np.array(self._prev_motor_velocities)
         work_penalty = np.abs(np.dot(self._dt_motor_torques[-1], dq_diff))
     self._prev_motor_velocities = self._dt_motor_velocities[-1].copy() if self._dt_motor_velocities else np.zeros(12)
-
-    # reward = vel_tracking_reward \
-    #         + yaw_reward \
-    #         + drift_reward \
-    #         - 0.01 * energy_reward \
-    #         - 0.1 * np.linalg.norm(self.robot.GetBaseOrientation() - np.array([0,0,0,1]))
 
     reward = 0.75 * self._time_step * x_vel_reward \
             + 0.75 * self._time_step * y_vel_reward \
@@ -590,8 +573,8 @@ class QuadrupedGymEnv(gym.Env):
     sideSign = np.array([-1, 1, -1, 1]) # get correct hip sign (body right is negative)
     
     # get motor kp and kd gains (can be modified)
-    kp = self._robot_config.MOTOR_KP # careful of size!
-    kd = self._robot_config.MOTOR_KD
+    # kp = self._robot_config.MOTOR_KP # careful of size!
+    # kd = self._robot_config.MOTOR_KD -----> have not correct size, therefore i added kp and kd ad diag arrays, which are sourced directly from the robot_config down below
     
     # get current motor velocities
     q = self.robot.GetMotorAngles()
