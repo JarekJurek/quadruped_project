@@ -63,6 +63,7 @@ def run_sb3(args):
         project=args.project_name,
         name=f"{args.learning_alg}-worker-{worker_id}-{timestamp}",
         dir=wandb_dir,
+        sync_tensorboard=True,
         config={
             "worker_id": worker_id,
             "learning_algorithm": args.learning_alg,
@@ -106,7 +107,7 @@ def run_sb3(args):
     # wandb_callback = WandbCallback(log_freq=1000, verbose=1)
     wandb_callback = WandbCallback(
         gradient_save_freq=100,
-        verbose=2,
+        # verbose=1,
     )
 
     # create Vectorized gym environment
@@ -138,7 +139,7 @@ def run_sb3(args):
         "clip_range": args.clip_range,
         "clip_range_vf": 1,
         "verbose": 1,
-        "tensorboard_log": None,
+        "tensorboard_log": args.save_path,
         "_init_setup_model": True,
         "policy_kwargs": policy_kwargs,
         # "target_kl": args.des_kl_divergence,
@@ -199,7 +200,8 @@ def run_sb3(args):
         model.learn(
             total_timesteps=args.total_timesteps, 
             log_interval=1,
-            callback=[checkpoint_callback, wandb_callback]
+            # callback=[checkpoint_callback, wandb_callback]
+            callback=[checkpoint_callback, WandbCallback()]
         )
         
         # Log successful completion
