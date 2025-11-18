@@ -17,35 +17,36 @@ from utils.file_utils import get_latest_model
 
 # utils
 from utils.utils import CheckpointCallback
+from wandb.integration.sb3 import WandbCallback
 
 import torch
 
 
-class WandbCallback(BaseCallback):
-    """Custom callback for logging to Weights & Biases during training"""
+# class WandbCallback(BaseCallback):
+#     """Custom callback for logging to Weights & Biases during training"""
     
-    def __init__(self, log_freq=1000, verbose=0):
-        super(WandbCallback, self).__init__(verbose)
-        self.log_freq = log_freq
+#     def __init__(self, log_freq=1000, verbose=0):
+#         super(WandbCallback, self).__init__(verbose)
+#         self.log_freq = log_freq
         
-    def _on_step(self) -> bool:
-        # Log metrics every log_freq steps
-        if self.n_calls % self.log_freq == 0:
-            # Get training metrics from the logger
-            if len(self.logger.name_to_value) > 0:
-                metrics = {}
-                for key, value in self.logger.name_to_value.items():
-                    if isinstance(value, (int, float)):
-                        metrics[key] = value
+#     def _on_step(self) -> bool:
+#         # Log metrics every log_freq steps
+#         if self.n_calls % self.log_freq == 0:
+#             # Get training metrics from the logger
+#             if len(self.logger.name_to_value) > 0:
+#                 metrics = {}
+#                 for key, value in self.logger.name_to_value.items():
+#                     if isinstance(value, (int, float)):
+#                         metrics[key] = value
                 
-                # Add timestep information
-                metrics["timesteps"] = self.num_timesteps
-                metrics["n_calls"] = self.n_calls
+#                 # Add timestep information
+#                 metrics["timesteps"] = self.num_timesteps
+#                 metrics["n_calls"] = self.n_calls
                 
-                # Log to wandb
-                wandb.log(metrics)
+#                 # Log to wandb
+#                 wandb.log(metrics)
         
-        return True
+#         return True
 
 
 def run_sb3(args):
@@ -69,15 +70,19 @@ def run_sb3(args):
             "use_gpu": args.use_gpu,
             "load_existing_model": args.load_nn,
             "total_timesteps": args.total_timesteps,
+            "control_frequency": args.control_frequency,
         }
     )
 
+    action_repeat = calculate_action_repeat(args)
+    
     env_configs = {"motor_control_mode":args.motor_control_mode,
                    "task_env": args.task_env,
                    "observation_space_mode": args.observation_space_mode,
-                   "timestep": args.time_step,
+                   "time_step": args.time_step,
                    "max_episode_length": args.max_episode_length,
-                   "randomize_cpg_params": args.randomize_cpg_params,}
+                   "randomize_cpg_params": args.randomize_cpg_params,
+                   "action_repeat": action_repeat,}
     
     # Log environment configuration to wandb
     wandb.config.update({"env_configs": env_configs})
@@ -98,7 +103,11 @@ def run_sb3(args):
     checkpoint_callback = CheckpointCallback(save_freq=30000, save_path=save_path,name_prefix='rl_model', verbose=2)
     
     # Create wandb callback
-    wandb_callback = WandbCallback(log_freq=1000, verbose=1)
+    # wandb_callback = WandbCallback(log_freq=1000, verbose=1)
+    wandb_callback = WandbCallback(
+        gradient_save_freq=100,
+        verbose=2,
+    )
 
     # create Vectorized gym environment
     env = lambda: QuadrupedGymEnv(**env_configs)  
@@ -236,6 +245,20 @@ def run_sb3(args):
     
     print(f"Worker {worker_id} completed successfully.")
 
+def calculate_action_repeat(args):
+    """
+    Mimics the delay in the control of the policy on an actual robot.
+    """
+    control_frequency = args.control_frequency
+    sim_frequency = 1.0 / args.time_step
+    action_repeat = int(sim_frequency // control_frequency)
+    
+    # Validate that frequencies are compatible
+    if sim_frequency % control_frequency != 0:
+        print(f"sim_freq ({sim_frequency}) must be divisible by control_freq ({control_frequency}). Setting action repeat to 10.")
+        action_repeat = 10
+    return action_repeat
+
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Quadruped RL training with Stable Baselines 3")
@@ -249,11 +272,12 @@ def parse_arguments():
     parser.add_argument("--num-envs", type=int, default=1, help="Number of pybullet environments to create for data collection (default: 1)")
     parser.add_argument("--use-gpu", action="store_true", help="Use GPU for training (make sure to install all necessary drivers)")
     parser.add_argument("--save-path", type=str, help="Path for storing intermediate models", default=".")
-    parser.add_argument("--time_step", type=float, default=0.01, help="time step")
-    parser.add_argument("--max_episode_length", type=float, default=20., help="max episode lenght")
-    parser.add_argument("--randomize_cpg_params", type=bool, default=True, help="Whether to randomize cpg params")
 
     parser.add_argument("--total_timesteps", type=int, default=1000000, help="Total timesteps")
+    parser.add_argument("--time_step", type=float, default=0.001, help="time step, for CPG_RL 0.01 s")
+    parser.add_argument("--max_episode_length", type=float, default=10., help="max episode lenght in seconds in CPG_RL 20.0 s")
+    parser.add_argument("--randomize_cpg_params", type=bool, default=True, help="Whether to randomize cpg params")
+    parser.add_argument("--control_frequency", type=int, default=100, help="The control frequency of the policy [Hz]")
 
     # PPO Hyperparams
     parser.add_argument("--batch_size", type=int, default=8192, help="Size of rollout / batch size")
