@@ -76,6 +76,7 @@ def load_sb3(args):
     env_config['render'] = True
     env_config['record_video'] = args.record_video
     env_config['add_noise'] = args.add_noise 
+    env_config["motor_control_mode"]=args.motor_control_mode
 
     # get latest model and normalization stats, and plot 
     stats_path = os.path.join(log_dir, "vec_normalize.pkl")
@@ -130,6 +131,7 @@ def parse_arguments():
     parser.add_argument("--add_noise", type=bool, default=False, help="Add noise flag")
     
     parser.add_argument("--learning-alg", type=str, default="PPO", choices=["PPO", "SAC"], help="Learning algorithm to use (default: PPO)")
+    parser.add_argument("--motor_control_mode", type=str, default="CPG", choices=["CPG", "PD","TORQUE", "CARTESIAN_PD"], help="Learning algorithm to use (default: PPO)")
     # parser.add_argument("--load-nn", action="store_true", help="Initialize training with a previous model")
     # parser.add_argument("--num-envs", type=int, default=1, help="Number of pybullet environments to create for data collection (default: 1)")
     parser.add_argument("--use-gpu", action="store_true", help="Use GPU for training (make sure to install all necessary drivers)")
