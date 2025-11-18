@@ -277,7 +277,6 @@ def parse_arguments():
     parser.add_argument("--max_episode_length", type=float, default=20., help="max episode lenght")
     parser.add_argument("--randomize_cpg_params", type=bool, default=True, help="Whether to randomize cpg params")
 
-    parser.add_argument("--batch_multiplier", type=int, default=24, help="Batch size multiplier")
     parser.add_argument("--n_mini_batch", type=int, default=4, help="Number of minibatch")
     parser.add_argument("--n_epochs", type=int, default=5, help="Number of epochs in PPO")
     parser.add_argument("--clip_range", type=float, default=0.2, help="Clip range in PPO")
