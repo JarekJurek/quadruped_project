@@ -27,4 +27,4 @@ source /zhome/d4/a/214319/miniconda3/bin/activate
 
 conda activate quadruped
 
-python run_sb3_wandb.py --project-name quadruped_rl  --use-gpu --save-path /work3/s243600 --learning-alg PPO --num-envs 100
+python run_sb3_wandb.py --project-name quadruped_rl --save-path /work3/s243600 --learning-alg PPO --num-envs 4096

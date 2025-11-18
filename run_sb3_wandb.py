@@ -17,35 +17,36 @@ from utils.file_utils import get_latest_model
 
 # utils
 from utils.utils import CheckpointCallback
+from wandb.integration.sb3 import WandbCallback
 
 import torch
 
 
-class WandbCallback(BaseCallback):
-    """Custom callback for logging to Weights & Biases during training"""
+# class WandbCallback(BaseCallback):
+#     """Custom callback for logging to Weights & Biases during training"""
     
-    def __init__(self, log_freq=1000, verbose=0):
-        super(WandbCallback, self).__init__(verbose)
-        self.log_freq = log_freq
+#     def __init__(self, log_freq=1000, verbose=0):
+#         super(WandbCallback, self).__init__(verbose)
+#         self.log_freq = log_freq
         
-    def _on_step(self) -> bool:
-        # Log metrics every log_freq steps
-        if self.n_calls % self.log_freq == 0:
-            # Get training metrics from the logger
-            if len(self.logger.name_to_value) > 0:
-                metrics = {}
-                for key, value in self.logger.name_to_value.items():
-                    if isinstance(value, (int, float)):
-                        metrics[key] = value
+#     def _on_step(self) -> bool:
+#         # Log metrics every log_freq steps
+#         if self.n_calls % self.log_freq == 0:
+#             # Get training metrics from the logger
+#             if len(self.logger.name_to_value) > 0:
+#                 metrics = {}
+#                 for key, value in self.logger.name_to_value.items():
+#                     if isinstance(value, (int, float)):
+#                         metrics[key] = value
                 
-                # Add timestep information
-                metrics["timesteps"] = self.num_timesteps
-                metrics["n_calls"] = self.n_calls
+#                 # Add timestep information
+#                 metrics["timesteps"] = self.num_timesteps
+#                 metrics["n_calls"] = self.n_calls
                 
-                # Log to wandb
-                wandb.log(metrics)
+#                 # Log to wandb
+#                 wandb.log(metrics)
         
-        return True
+#         return True
 
 
 def run_sb3(args):
@@ -60,7 +61,7 @@ def run_sb3(args):
     # Initialize wandb
     wandb.init(
         project=args.project_name,
-        name=f"{args.learning_alg}-worker-{worker_id}-{datetime.now().strftime('%m%d%y%H%M%S')}",
+        name=f"{args.learning_alg}-worker-{worker_id}-{timestamp}",
         dir=wandb_dir,
         config={
             "worker_id": worker_id,
@@ -68,20 +69,20 @@ def run_sb3(args):
             "num_envs": args.num_envs,
             "use_gpu": args.use_gpu,
             "load_existing_model": args.load_nn,
-            "total_timesteps": 1000000,  # You might want to make this configurable
+            "total_timesteps": args.total_timesteps,
+            "control_frequency": args.control_frequency,
         }
     )
 
-    # after implementing, you will want to test how well the agent learns with your MDP: 
-    env_configs = {}
-
-    env_configs = {"motor_control_mode":"CPG",
-                #    "task_env": "FWD_LOCOMOTION",
-                   "task_env": "LR_COURSE_TASK",
-                   "observation_space_mode": "LR_COURSE_OBS",
-                   "timestep": args.time_step,
+    action_repeat = calculate_action_repeat(args)
+    
+    env_configs = {"motor_control_mode":args.motor_control_mode,
+                   "task_env": args.task_env,
+                   "observation_space_mode": args.observation_space_mode,
+                   "time_step": args.time_step,
                    "max_episode_length": args.max_episode_length,
-                   "randomize_cpg_params": args.randomize_cpg_params,}
+                   "randomize_cpg_params": args.randomize_cpg_params,
+                   "action_repeat": action_repeat,}
     
     # Log environment configuration to wandb
     wandb.config.update({"env_configs": env_configs})
@@ -91,19 +92,8 @@ def run_sb3(args):
     else:
         gpu_arg = "cpu"
 
-    if args.load_nn:
-        interm_dir = f"{args.save_path}/logs/intermediate_models/{args.project_name}"
-        log_dir = interm_dir + '' # add path
-        stats_path = os.path.join(log_dir, "vec_normalize.pkl")
-        model_name = get_latest_model(log_dir)
-        
-        wandb.config.update({
-            "loaded_model_path": model_name,
-            "loaded_stats_path": stats_path
-        })
-
     # directory to save policies and normalization parameters
-    save_path = f'{args.save_path}/logs/intermediate_models/{args.project_name}/'+ datetime.now().strftime("%m%d%y%H%M%S") + '/'
+    save_path = f'{args.save_path}/logs/intermediate_models/{args.project_name}/'+ timestamp + '/'
     os.makedirs(save_path, exist_ok=True)
     
     # Log save path to wandb
@@ -113,7 +103,11 @@ def run_sb3(args):
     checkpoint_callback = CheckpointCallback(save_freq=30000, save_path=save_path,name_prefix='rl_model', verbose=2)
     
     # Create wandb callback
-    wandb_callback = WandbCallback(log_freq=1000, verbose=1)
+    # wandb_callback = WandbCallback(log_freq=1000, verbose=1)
+    wandb_callback = WandbCallback(
+        gradient_save_freq=100,
+        verbose=2,
+    )
 
     # create Vectorized gym environment
     env = lambda: QuadrupedGymEnv(**env_configs)  
@@ -122,57 +116,24 @@ def run_sb3(args):
     # normalize observations to stabilize learning (why?)
     env = VecNormalize(env, norm_obs=True, norm_reward=False, clip_obs=100.)
 
-    if args.load_nn:
-        env = lambda: QuadrupedGymEnv(**env_configs)
-        env = make_vec_env(env, monitor_dir=save_path, n_envs=args.num_envs)
-        env = VecNormalize.load(stats_path, env)
-
     # Multi-layer perceptron (MLP) policy of two layers of size _,_ each with tanh activation function
     # policy_kwargs = dict(net_arch=[256,256]) # act_fun=tf.nn.tanh
     policy_kwargs = dict(net_arch=[512, 256, 128], activation_fn=torch.nn.modules.activation.ELU)
 
     # What are these hyperparameters? Check here: https://stable-baselines3.readthedocs.io/en/master/modules/ppo.html
-    # n_steps = 4096 
-    learning_rate = lambda f: 1e-4 
-    # ppo_config = {  "gamma":0.99, 
-    #                 "n_steps": int(n_steps/args.num_envs), 
-    #                 "ent_coef":args.ent_coef, 
-    #                 "learning_rate":learning_rate, 
-    #                 "vf_coef":0.5,
-    #                 "max_grad_norm":0.5, 
-    #                 "gae_lambda":0.95, 
-    #                 "batch_size":128,
-    #                 "n_epochs":args.n_epochs, 
-    #                 "clip_range":args.clip_range, 
-    #                 "clip_range_vf":1,
-    #                 "verbose":1, 
-    #                 "tensorboard_log":None, 
-    #                 "_init_setup_model":True, 
-    #                 "policy_kwargs":policy_kwargs,
-    #                 "target_kl": args.des_kl_divergence,
-    #                 "device": gpu_arg}
-    n_steps = args.n_steps                 # timesteps per env per update (e.g. 24)
     learning_rate = lambda f: 1e-4
 
-    total_rollout = n_steps * args.num_envs
-    # minibatch_size = args.num_envs * args.mini_batch_multiplier  # e.g. 4096 * 6 = 24576
-    # assert total_rollout % minibatch_size == 0, (
-    #     f"total_rollout ({total_rollout}) must be divisible by minibatch_size ({minibatch_size})"
-    # )
-    assert total_rollout % args.n_mini_batch == 0, (
-        f"total_rollout ({total_rollout}) must be divisible by n_mini_batch ({args.n_mini_batch})"
-    )
-    minibatch_size = total_rollout // args.n_mini_batch
+    minibatch_size = args.batch_size // args.n_mini_batch
 
     ppo_config = {
         "gamma": args.discount,
-        "n_steps": n_steps,                      # steps per env
+        "n_steps": args.batch_size / args.num_envs, # steps per env
         "ent_coef": args.ent_coef,
         "learning_rate": learning_rate,
         "vf_coef": 0.5,
         "max_grad_norm": 0.5,
         "gae_lambda": args.gae_discount,
-        "batch_size": int(minibatch_size),            # SB3 minibatch size
+        "batch_size": int(minibatch_size), # SB3 minibatch size
         "n_epochs": args.n_epochs,
         "clip_range": args.clip_range,
         "clip_range_vf": 1,
@@ -180,7 +141,7 @@ def run_sb3(args):
         "tensorboard_log": None,
         "_init_setup_model": True,
         "policy_kwargs": policy_kwargs,
-        "target_kl": args.des_kl_divergence,
+        # "target_kl": args.des_kl_divergence,
         "device": gpu_arg,
     }
 
@@ -200,34 +161,49 @@ def run_sb3(args):
                 "seed":None, 
                 "device": gpu_arg}
 
-    # Log hyperparameters to wandb
-    if args.learning_alg == "PPO":
-        wandb.config.update({"ppo_config": ppo_config})
-        model = PPO('MlpPolicy', env, **ppo_config)
-    elif args.learning_alg == "SAC":
-        wandb.config.update({"sac_config": sac_config})
-        model = SAC('MlpPolicy', env, **sac_config)
-    else:
-        raise ValueError(args.learning_alg + ' not implemented')
-
+    #Load model
     if args.load_nn:
+        interm_dir = f"{args.save_path}/logs/intermediate_models/{args.project_name}"
+        log_dir = interm_dir + '' # add path
+        stats_path = os.path.join(log_dir, "vec_normalize.pkl")
+        model_name = get_latest_model(log_dir)
+        
+        wandb.config.update({
+            "loaded_model_path": model_name,
+            "loaded_stats_path": stats_path
+        })
+
+        env = VecNormalize.load(stats_path, env)
+
         if args.learning_alg == "PPO":
             model = PPO.load(model_name, env)
         elif args.learning_alg == "SAC":
             model = SAC.load(model_name, env)
+        else:
+            raise ValueError(args.learning_alg + ' not implemented')
         print("\nLoaded model", model_name, "\n")
         wandb.log({"model_loaded": True, "loaded_model_name": model_name})
+    #Create new model
+    else:
+        if args.learning_alg == "PPO":
+            wandb.config.update({"ppo_config": ppo_config})
+            model = PPO('MlpPolicy', env, **ppo_config)
+        elif args.learning_alg == "SAC":
+            wandb.config.update({"sac_config": sac_config})
+            model = SAC('MlpPolicy', env, **sac_config)
+        else:
+            raise ValueError(args.learning_alg + ' not implemented')
 
     # Learn and save (may need to train for longer)
     try:
         model.learn(
-            total_timesteps=1000000, 
+            total_timesteps=args.total_timesteps, 
             log_interval=1,
             callback=[checkpoint_callback, wandb_callback]
         )
         
         # Log successful completion
-        wandb.log({"training_completed": True, "final_timesteps": 1000000})
+        wandb.log({"training_completed": True, "final_timesteps": args.total_timesteps})
         
     except Exception as e:
         print(f"Training failed with error: {e}")
@@ -257,7 +233,7 @@ def run_sb3(args):
     # Log final summary
     wandb.log({
         "worker_completed": True,
-        "total_training_steps": 1000000,
+        "total_training_steps": args.total_timesteps,
         "algorithm_used": args.learning_alg,
         "cpg_h": env.cpg_h_container,
         "cpg_g_c": env.cpg_g_c_container,
@@ -269,29 +245,49 @@ def run_sb3(args):
     
     print(f"Worker {worker_id} completed successfully.")
 
+def calculate_action_repeat(args):
+    """
+    Mimics the delay in the control of the policy on an actual robot.
+    """
+    control_frequency = args.control_frequency
+    sim_frequency = 1.0 / args.time_step
+    action_repeat = int(sim_frequency // control_frequency)
+    
+    # Validate that frequencies are compatible
+    if sim_frequency % control_frequency != 0:
+        print(f"sim_freq ({sim_frequency}) must be divisible by control_freq ({control_frequency}). Setting action repeat to 10.")
+        action_repeat = 10
+    return action_repeat
+
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Quadruped RL training with Stable Baselines 3")
     parser.add_argument("--project-name", type=str, default="quadruped_rl", help="Name of the project")
     
     parser.add_argument("--learning-alg", type=str, default="PPO", choices=["PPO", "SAC"], help="Learning algorithm to use (default: PPO)")
+    parser.add_argument("--motor_control_mode", type=str, default="CPG", choices=["CPG", "PD","TORQUE", "CARTESIAN_PD"], help="Motor control mode")
+    parser.add_argument("--observation_space_mode", type=str, default="LR_COURSE_OBS", choices=["DEFAULT", "LR_COURSE_OBS"], help="Observation space mode")
+    parser.add_argument("--task_env", type=str, default="LR_COURSE_TASK", choices=["LR_COURSE_TASK", "FLAGRUN","FWD_LOCOMOTION"], help="Task to be executed")
     parser.add_argument("--load-nn", action="store_true", help="Initialize training with a previous model")
     parser.add_argument("--num-envs", type=int, default=1, help="Number of pybullet environments to create for data collection (default: 1)")
     parser.add_argument("--use-gpu", action="store_true", help="Use GPU for training (make sure to install all necessary drivers)")
     parser.add_argument("--save-path", type=str, help="Path for storing intermediate models", default=".")
-    parser.add_argument("--time_step", type=float, default=0.01, help="time step")
-    parser.add_argument("--max_episode_length", type=float, default=20., help="max episode lenght")
-    parser.add_argument("--randomize_cpg_params", type=bool, default=True, help="Whether to randomize cpg params")
 
+    parser.add_argument("--total_timesteps", type=int, default=1000000, help="Total timesteps")
+    parser.add_argument("--time_step", type=float, default=0.001, help="time step, for CPG_RL 0.01 s")
+    parser.add_argument("--max_episode_length", type=float, default=10., help="max episode lenght in seconds in CPG_RL 20.0 s")
+    parser.add_argument("--randomize_cpg_params", type=bool, default=True, help="Whether to randomize cpg params")
+    parser.add_argument("--control_frequency", type=int, default=100, help="The control frequency of the policy [Hz]")
+
+    # PPO Hyperparams
+    parser.add_argument("--batch_size", type=int, default=8192, help="Size of rollout / batch size")
     parser.add_argument("--n_mini_batch", type=int, default=4, help="Number of minibatch")
-    parser.add_argument("--n_epochs", type=int, default=5, help="Number of epochs in PPO")
-    parser.add_argument("--clip_range", type=float, default=0.2, help="Clip range in PPO")
-    parser.add_argument("--ent_coef", type=float, default=0.01, help="Entropy coefficient in PPO")
-    parser.add_argument("--discount", type=float, default=0.99, help="Discount factor in PPO")
+    parser.add_argument("--discount", type=float, default=0.99, help="Discount factor in PPO (gamma)")
+    parser.add_argument("--ent_coef", type=float, default=0.0, help="Entropy coefficient in PPO in CPG-RL 0.01")
     parser.add_argument("--gae_discount", type=float, default=0.95, help="GAE discount factor in PPO")
-    parser.add_argument("--des_kl_divergence", type=float, default=0.01, help="Desired KL divergence in PPO")
-    parser.add_argument("--n_steps", type=int, default=24, help="Number of steps per environment per update in PPO")
-    
+    parser.add_argument("--n_epochs", type=int, default=10, help="Number of epochs in PPO in CPG-RL 5")
+    parser.add_argument("--clip_range", type=float, default=0.2, help="Clip range in PPO")
+    # parser.add_argument("--des_kl_divergence", type=float, default=None, help="Desired KL divergence in PPOin CPG-RL 0.01")    
 
     args = parser.parse_args()
     return args
