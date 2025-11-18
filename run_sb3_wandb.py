@@ -127,7 +127,7 @@ def run_sb3(args):
 
     ppo_config = {
         "gamma": args.discount,
-        "n_steps": args.batch_size / args.num_envs, # steps per env
+        "n_steps": int(args.batch_size / args.num_envs), # steps per env
         "ent_coef": args.ent_coef,
         "learning_rate": learning_rate,
         "vf_coef": 0.5,
