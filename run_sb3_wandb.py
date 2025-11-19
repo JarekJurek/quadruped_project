@@ -22,33 +22,6 @@ from wandb.integration.sb3 import WandbCallback
 import torch
 
 
-# class WandbCallback(BaseCallback):
-#     """Custom callback for logging to Weights & Biases during training"""
-    
-#     def __init__(self, log_freq=1000, verbose=0):
-#         super(WandbCallback, self).__init__(verbose)
-#         self.log_freq = log_freq
-        
-#     def _on_step(self) -> bool:
-#         # Log metrics every log_freq steps
-#         if self.n_calls % self.log_freq == 0:
-#             # Get training metrics from the logger
-#             if len(self.logger.name_to_value) > 0:
-#                 metrics = {}
-#                 for key, value in self.logger.name_to_value.items():
-#                     if isinstance(value, (int, float)):
-#                         metrics[key] = value
-                
-#                 # Add timestep information
-#                 metrics["timesteps"] = self.num_timesteps
-#                 metrics["n_calls"] = self.n_calls
-                
-#                 # Log to wandb
-#                 wandb.log(metrics)
-        
-#         return True
-
-
 def run_sb3(args):
     # Get worker ID from LSF environment (or default for local testing)
     worker_id = int(os.getenv('LSB_JOBINDEX', '1'))
