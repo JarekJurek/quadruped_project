@@ -56,7 +56,8 @@ def run_sb3(args):
                    "time_step": args.time_step,
                    "max_episode_length": args.max_episode_length,
                    "randomize_cpg_params": args.randomize_cpg_params,
-                   "action_repeat": action_repeat,}
+                   "action_repeat": action_repeat,
+                   "des_vel_x": args.des_x_vel}
     
     # Log environment configuration to wandb
     wandb.config.update({"env_configs": env_configs})
@@ -247,6 +248,10 @@ def parse_arguments():
     parser.add_argument("--num-envs", type=int, default=1, help="Number of pybullet environments to create for data collection (default: 1)")
     parser.add_argument("--use-gpu", action="store_true", help="Use GPU for training (make sure to install all necessary drivers)")
     parser.add_argument("--save-path", type=str, help="Path for storing intermediate models", default=".")
+
+
+    parser.add_argument("--des_x_vel", type=float, default=0.4, help="desired linear velocity x axis")
+
 
     parser.add_argument("--total_timesteps", type=int, default=1000000, help="Total timesteps")
     parser.add_argument("--time_step", type=float, default=0.001, help="time step, for CPG_RL 0.01 s")

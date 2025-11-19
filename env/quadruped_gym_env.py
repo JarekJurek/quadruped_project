@@ -143,6 +143,7 @@ class QuadrupedGymEnv(gym.Env):
       terrain=None,
       test_flagrun=False,
       max_episode_length=10.,
+      des_vel_x=0.4,
       randomize_cpg_params=False,
       **kwargs): # any extra arguments from legacy
     """Initialize the quadruped gym environment.
@@ -205,7 +206,7 @@ class QuadrupedGymEnv(gym.Env):
     self.cpg_h_container = []
     self.cpg_g_c_container = []
 
-    self._des_vel_x = 0.1
+    self._des_vel_x = des_vel_x
     self._des_vel_x_min = 0.01
     self._des_vel_x_max = 1.0
     self.des_vel_x_container = []
@@ -257,29 +258,49 @@ class QuadrupedGymEnv(gym.Env):
       # observation_high = (np.zeros(50) + OBSERVATION_EPS)
       # observation_low = (np.zeros(50) -  OBSERVATION_EPS)
 
-      # CPG state dimensions: r (4), dr (4), theta (4), dtheta (4) = 16 total
-      # Reasonable bounds for each component:
-      
-      # r (amplitudes): typically [0, 2] based on MU_LOW and MU_UPP
-      r_high = np.array([MU_UPP] * 4)
-      r_low = np.array([MU_LOW] * 4)
-      
-      # dr (amplitude derivatives): reasonable derivative bounds
-      dr_high = np.array([5.0] * 4)  
-      dr_low = np.array([-5.0] * 4)
-      
-      # theta (phases): phases are typically in [0, 2π] but can be unbounded due to wrapping
-      # For RL, it's better to use [-π, π] or a larger range to handle phase wrapping
-      theta_high = np.array([2 * np.pi] * 4)
-      theta_low = np.array([-2 * np.pi] * 4)
-      
-      # dtheta (phase derivatives/frequencies): angular velocities
-      # Based on omega ranges in ScaleActionToCPGStateModulations: [0, 4.5*2*π]
-      dtheta_high = np.array([4.5 * 2 * np.pi] * 4)  # ~28.3 rad/s
-      dtheta_low = np.array([-4.5 * 2 * np.pi] * 4)
-      
-      observation_high = np.concatenate((r_high, dr_high, theta_high, dtheta_high)) + OBSERVATION_EPS
-      observation_low = np.concatenate((r_low, dr_low, theta_low, dtheta_low)) - OBSERVATION_EPS
+      """
+      full observation:
+      - body orientation
+      - body linear velocity
+      - body angular velocity
+      - joint position
+      - joint velocities
+      - foot contact booleans
+      - last policy action
+      - CPG states
+        - r
+        - dr
+        - theta
+        - dtheta
+      """
+       
+      observation_high = (np.concatenate((
+        np.array([1.0] * 4), # base orientation in quaternions
+        np.array([19.] * 3), # body linear velocity
+        np.array([5.] * 3), # base angular velocity
+        self._robot_config.UPPER_ANGLE_JOINT, # joint position
+        self._robot_config.VELOCITY_LIMITS, # joint velocities
+        np.array([1.0] * 4), # foot contact booleans
+        np.array([1.0] * 8), # last policy action
+        np.array([MU_UPP] * 4), # r
+        np.array([5.0] * 4), # dr
+        np.array([np.pi] * 4), # theta
+        np.array([4.5 * 2 * np.pi] * 4), # dtheta
+      )) + OBSERVATION_EPS)
+
+      observation_low = (np.concatenate((
+        np.array([-1.0] * 4), # base orientation in quaternions
+        np.array([-19.] * 3), # body linear velocity
+        np.array([-5.0] * 3), # base angular velocity
+        self._robot_config.LOWER_ANGLE_JOINT, # joint position
+        -self._robot_config.VELOCITY_LIMITS, # joint velocities
+        np.array([0.] * 4), # foot contact booleans
+        np.array([-1.0] * 8), # last policy action
+        np.array([MU_LOW] * 4), # r
+        np.array([-5.0] * 4), # dr
+        np.array([-np.pi] * 4), # theta
+        np.array([-4.5 * 2 * np.pi] * 4), # dtheta
+      )) + OBSERVATION_EPS)
     
     else:
       raise ValueError("observation space not defined or not intended")
@@ -312,8 +333,30 @@ class QuadrupedGymEnv(gym.Env):
 
       # WE CAN ADD FOOT CONTACT BOOLEANS AND CPG STATES AS ANOTHER OBSERVATION
 
-      # self._observation = np.zeros(50)
-      self._observation = np.concatenate((self._cpg.get_r(), 
+      """
+      full observation:
+      - body orientation
+      - body linear velocity
+      - body angular velocity
+      - joint position
+      - joint velocities
+      - foot contact booleans
+      - last policy action
+      - CPG states
+        - r
+        - dr
+        - theta
+        - dtheta
+      """
+
+      self._observation = np.concatenate((self.robot.GetBaseOrientation(),
+                                          self.robot.GetBaseLinearVelocity(),
+                                          self.robot.GetBaseAngularVelocity(),
+                                          self.robot.GetMotorAngles(),
+                                          self.robot.GetMotorVelocities(),
+                                          np.array(self.robot.GetContactInfo()[3]),
+                                          self._last_action,
+                                          self._cpg.get_r(), 
                                           self._cpg.get_dr(),
                                           self._cpg.get_theta(),
                                           self._cpg.get_dtheta()))
@@ -460,19 +503,23 @@ class QuadrupedGymEnv(gym.Env):
         work_penalty = np.abs(np.dot(self._dt_motor_torques[-1], dq_diff))
     self._prev_motor_velocities = self._dt_motor_velocities[-1].copy() if self._dt_motor_velocities else np.zeros(12)
 
+    # reward = 0.75 * self._time_step * x_vel_reward \
+    #         + 0.75 * self._time_step * y_vel_reward \
+    #         + 0.5 * self._time_step * angular_velocity_tracking \
+    #         + 2. * self._time_step * z_vel_penalty \
+    #         + 0.05 * self._time_step * angular_velocity_penalty \
+    #         + 0.001 * self._time_step * work_penalty \
     reward = 0.75 * self._time_step * x_vel_reward \
-            + 0.75 * self._time_step * y_vel_reward \
-            + 0.5 * self._time_step * angular_velocity_tracking \
-            + 2. * self._time_step * z_vel_penalty \
-            + 0.05 * self._time_step * angular_velocity_penalty \
-            + 0.001 * self._time_step * work_penalty \
+      + 0.75 * self._time_step * y_vel_reward \
+      + 2. * self._time_step * z_vel_penalty \
+      + 0.001 * self._time_step * work_penalty \
 
     return max(reward,0) # keep rewards positive
 
   def _reward(self):
     """ Get reward depending on task"""
     if self._TASK_ENV == "FWD_LOCOMOTION":
-      return self._reward_fwd_locomotion(des_vel_x=None)
+      return self._reward_fwd_locomotion(des_vel_x=self._des_vel_x)
     elif self._TASK_ENV == "LR_COURSE_TASK":
       return self._reward_lr_course(des_vel_x=self._des_vel_x)
     elif self._TASK_ENV == "FLAGRUN":
@@ -558,7 +605,7 @@ class QuadrupedGymEnv(gym.Env):
     u = np.clip(actions,-1,1)
 
     # scale omega to ranges, and set in CPG (range is an example)
-    omega = self._scale_helper( u[0:4], 0, 4.5*2*np.pi)
+    omega = self._scale_helper( u[0:4], 5, 4.5*2*np.pi)
     self._cpg.set_omega_rl(omega)
 
     # scale mu to ranges, and set in CPG (squared since we converge to the sqrt in the CPG amplitude)
@@ -597,10 +644,10 @@ class QuadrupedGymEnv(gym.Env):
       tau += robot_config.kp @ (q_des - q[3*i:3*i+3]) + robot_config.kd @ (-dq[3*i:3*i+3])
 
       # add Cartesian PD contribution (as you wish)
-      _, des_xyz_leg_pos = self.robot.ComputeJacobianAndPosition(legID=i, specific_q=q_des)
-      J, pos_leg_frame = self.robot.ComputeJacobianAndPosition(i)
-      foot_lin_vel_leg_frame = J @ dq[3*i:3*i+3]
-      tau += J.T @ (robot_config.kpCartesian @ (des_xyz_leg_pos - pos_leg_frame) + robot_config.kdCartesian @ (-foot_lin_vel_leg_frame))
+      # _, des_xyz_leg_pos = self.robot.ComputeJacobianAndPosition(legID=i, specific_q=q_des)
+      # J, pos_leg_frame = self.robot.ComputeJacobianAndPosition(i)
+      # foot_lin_vel_leg_frame = J @ dq[3*i:3*i+3]
+      # tau += J.T @ (robot_config.kpCartesian @ (des_xyz_leg_pos - pos_leg_frame) + robot_config.kdCartesian @ (-foot_lin_vel_leg_frame))
       
       action[3*i:3*i+3] = tau
 

@@ -9,7 +9,7 @@
 ### -- Set the span of the job to 1 node --
 #BSUB -R "span[hosts=1]"
 ### -- set walltime limit: hh:mm --  maximum 24 hours for GPU-queues right now
-#BSUB -W 4:00
+#BSUB -W 24:00
 # request system-memory
 #BSUB -R "rusage[mem=4GB]"
 #BSUB -R "select[model==XeonGold6226R]"
@@ -27,4 +27,4 @@ source /zhome/d4/a/214319/miniconda3/bin/activate
 
 conda activate quadruped
 
-python run_sb3_wandb.py --project-name quadruped_rl --save-path /work3/s243600 --learning-alg PPO --num-envs 4096
+python run_sb3_wandb.py --project-name quadruped_rl --save-path /work3/s243600 --learning-alg PPO --num-envs 40 --task_env FWD_LOCOMOTION --des_x_vel 0.8 -total_timesteps --total_timesteps 5000000
