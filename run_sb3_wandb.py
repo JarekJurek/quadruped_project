@@ -1,15 +1,19 @@
 # misc
 import argparse
 import os
+import traceback
 from datetime import datetime
 
-import wandb
+import torch
 from stable_baselines3 import PPO, SAC
+from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.env_util import make_vec_env
 
 # stable baselines 3
-from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize, SubprocVecEnv
-from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNormalize
+from wandb.integration.sb3 import WandbCallback
+
+import wandb
 
 # gym environment
 from env.quadruped_gym_env import QuadrupedGymEnv
@@ -17,9 +21,6 @@ from utils.file_utils import get_latest_model
 
 # utils
 from utils.utils import CheckpointCallback
-from wandb.integration.sb3 import WandbCallback
-
-import torch
 
 
 def run_sb3(args):
@@ -182,8 +183,9 @@ def run_sb3(args):
         wandb.log({"training_completed": True, "final_timesteps": args.total_timesteps})
         
     except Exception as e:
-        print(f"Training failed with error: {e}")
-        wandb.log({"training_failed": True, "error_message": str(e)})
+        tb_str = traceback.format_exc()
+        print(f"Training failed with error: {e}\n{tb_str}")
+        wandb.log({"training_failed": True, "error_message": str(e), "traceback": tb_str})
         wandb.finish()
         raise e
 
