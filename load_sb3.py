@@ -79,6 +79,7 @@ def load_sb3(args):
     env_config["motor_control_mode"]=args.motor_control_mode
     env_config["task_env"]=args.task_env
     env_config["observation_space_mode"]=args.observation_space_mode
+    env_config["des_x_vel"]=args.des_x_vel
 
     # get latest model and normalization stats, and plot 
     stats_path = os.path.join(log_dir, "vec_normalize.pkl")
@@ -131,11 +132,13 @@ def parse_arguments():
     parser.add_argument("--add_noise", type=bool, default=False, help="Add noise flag")
 
     parser.add_argument("--sim_time", type=int, default=5000, help="Duration of the simulation in miliseconds (has to be integer)")
+
+    parser.add_argument("--des_x_vel", type=float, default=0.4, help="desired linear velocity x axis")
     
     parser.add_argument("--learning-alg", type=str, default="PPO", choices=["PPO", "SAC"], help="Learning algorithm to use (default: PPO)")
     parser.add_argument("--motor_control_mode", type=str, default="CPG", choices=["CPG", "PD","TORQUE", "CARTESIAN_PD"], help="Motor control mode")
     parser.add_argument("--observation_space_mode", type=str, default="LR_COURSE_OBS", choices=["DEFAULT", "LR_COURSE_OBS"], help="Observation space mode")
-    parser.add_argument("--task_env", type=str, default="LR_COURSE_TASK", choices=["LR_COURSE_TASK", "FLAGRUN","FWD_LOCOMOTION"], help="Task to be executed")
+    parser.add_argument("--task_env", type=str, default="FWD_LOCOMOTION", choices=["LR_COURSE_TASK", "FLAGRUN","FWD_LOCOMOTION"], help="Task to be executed")
     parser.add_argument("--save-path", type=str, help="Path for storing intermediate models", default=".")
     parser.add_argument("--full_path", type=str, help="Full path to the model location", required=True)
 
