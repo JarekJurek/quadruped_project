@@ -79,10 +79,10 @@ def run_sb3(args):
     
     # Create wandb callback
     # wandb_callback = WandbCallback(log_freq=1000, verbose=1)
-    wandb_callback = WandbCallback(
-        gradient_save_freq=100,
-        # verbose=1,
-    )
+    # wandb_callback = WandbCallback(
+    #     gradient_save_freq=100,
+    #     # verbose=1,
+    # )
 
     # create Vectorized gym environment
     env = lambda: QuadrupedGymEnv(**env_configs)  

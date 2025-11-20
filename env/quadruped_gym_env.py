@@ -707,6 +707,8 @@ class QuadrupedGymEnv(gym.Env):
     # Update seed
     self.seed(seed)
 
+    self._last_action = np.zeros(self._action_dim)
+
     # Randomize CPG parameters for domain randomization
     if self._randomize_cpg_params:
       self._randomize_cpg_parameters()
@@ -782,7 +784,6 @@ class QuadrupedGymEnv(gym.Env):
       self._pybullet_client.configureDebugVisualizer(pybullet.COV_ENABLE_RENDERING, 1)
 
     self._settle_robot()
-    self._last_action = np.zeros(self._action_dim)
     
     if self._is_record_video:
       self.recordVideoHelper()
