@@ -198,10 +198,10 @@ class QuadrupedGymEnv(gym.Env):
       self._observation_noise_stdev = 0.0
 
     self._randomize_cpg_params = randomize_cpg_params
-    self._h_min = 0.1,
-    self._h_max = 0.3,
-    self._g_c_min = 0.02, 
-    self._g_c_max = 0.2,
+    self._h_min = 0.1
+    self._h_max = 0.3
+    self._g_c_min = 0.02
+    self._g_c_max = 0.2
 
     self.cpg_h_container = []
     self.cpg_g_c_container = []
