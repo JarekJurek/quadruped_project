@@ -8,7 +8,7 @@ from stable_baselines3 import PPO, SAC
 from stable_baselines3.common.env_util import make_vec_env
 
 # stable baselines 3
-from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize, SubprocVecEnv
 from stable_baselines3.common.callbacks import BaseCallback
 
 # gym environment
@@ -86,7 +86,7 @@ def run_sb3(args):
 
     # create Vectorized gym environment
     env = lambda: QuadrupedGymEnv(**env_configs)  
-    env = make_vec_env(env, monitor_dir=save_path,n_envs=args.num_envs)
+    env = make_vec_env(env, monitor_dir=save_path,n_envs=args.num_envs, vec_env_cls=SubprocVecEnv)
 
     # normalize observations to stabilize learning (why?)
     env = VecNormalize(env, norm_obs=True, norm_reward=False, clip_obs=100.)
