@@ -360,6 +360,9 @@ class QuadrupedGymEnv(gym.Env):
                                           self._cpg.get_dr(),
                                           self._cpg.get_theta(),
                                           self._cpg.get_dtheta()))
+      expected_size = self.observation_space.shape[0]
+      if self._observation.shape[0] != expected_size:
+        raise ValueError(f"Observation shape mismatch: got {self._observation.shape[0]}, expected {expected_size}")
     else:
       raise ValueError("observation space not defined or not intended")
 
@@ -708,6 +711,10 @@ class QuadrupedGymEnv(gym.Env):
     self.seed(seed)
 
     self._last_action = np.zeros(self._action_dim)
+
+    if hasattr(self, '_cpg'):
+      # Force CPG to update and ensure states are initialized
+      self._cpg.update()
 
     # Randomize CPG parameters for domain randomization
     if self._randomize_cpg_params:
