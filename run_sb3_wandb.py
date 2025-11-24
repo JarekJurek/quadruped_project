@@ -97,7 +97,7 @@ def run_sb3(args):
     policy_kwargs = dict(net_arch=[512, 256, 128], activation_fn=torch.nn.modules.activation.ELU)
 
     # What are these hyperparameters? Check here: https://stable-baselines3.readthedocs.io/en/master/modules/ppo.html
-    learning_rate = lambda f: 1e-4
+    # learning_rate = lambda f: 1e-4
 
     minibatch_size = args.batch_size // args.n_mini_batch
 
@@ -105,7 +105,7 @@ def run_sb3(args):
         "gamma": args.discount,
         "n_steps": int(args.batch_size / args.num_envs), # steps per env
         "ent_coef": args.ent_coef,
-        "learning_rate": learning_rate,
+        "learning_rate": args.learning_rate,
         "vf_coef": 0.5,
         "max_grad_norm": 0.5,
         "gae_lambda": args.gae_discount,
@@ -119,6 +119,7 @@ def run_sb3(args):
         "policy_kwargs": policy_kwargs,
         # "target_kl": args.des_kl_divergence,
         "device": gpu_arg,
+        "use_sde": args.use_sde
     }
 
     # What are these hyperparameters? Check here: https://stable-baselines3.readthedocs.io/en/master/modules/sac.html
@@ -269,6 +270,8 @@ def parse_arguments():
     parser.add_argument("--gae_discount", type=float, default=0.95, help="GAE discount factor in PPO")
     parser.add_argument("--n_epochs", type=int, default=10, help="Number of epochs in PPO in CPG-RL 5")
     parser.add_argument("--clip_range", type=float, default=0.2, help="Clip range in PPO")
+    parser.add_argument("--use_sde", type=bool, default=False, help="Whether to use generalized State Dependent Exploration (gSDE) instead of action noise exploration")
+    parser.add_argument("--learning_rate", type=float, default=1e-4, help="Learning rate")
     # parser.add_argument("--des_kl_divergence", type=float, default=None, help="Desired KL divergence in PPOin CPG-RL 0.01")    
 
     args = parser.parse_args()
