@@ -479,6 +479,19 @@ class QuadrupedGymEnv(gym.Env):
     
     return reward  # Don't clamp to zero - allow negative rewards
 
+  def _reward_fwd_locomotion_basic(self):
+    """ Reward progress in the positive world x direction.  """
+    current_base_position = self.robot.GetBasePosition()
+    forward_reward = current_base_position[0] - self._last_base_position[0]
+    self._last_base_position = current_base_position
+    # clip reward to MAX_FWD_VELOCITY (avoid exploiting simulator dynamics)
+    if MAX_FWD_VELOCITY < np.inf:
+      # calculate what max distance can be over last time interval based on max allowed fwd velocity
+      max_dist = MAX_FWD_VELOCITY * (self._time_step * self._action_repeat)
+      forward_reward = min( forward_reward, max_dist)
+
+    return 2.0 * forward_reward
+
   def get_distance_and_angle_to_goal(self):
     """ Helper to return distance and angle to current goal location. """
     # current object location
@@ -572,6 +585,8 @@ class QuadrupedGymEnv(gym.Env):
       return self._reward_fwd_locomotion(des_vel_x=self._des_vel_x)
     elif self._TASK_ENV == "FWD_CUSTOM":
       return self._reward_fwd_locomotion_custom(des_vel_x=self._des_vel_x)
+    elif self._TASK_ENV == "FWD_BASIC":
+      return self._reward_fwd_locomotion_basic()
     elif self._TASK_ENV == "LR_COURSE_TASK":
       return self._reward_lr_course(des_vel_x=self._des_vel_x)
     elif self._TASK_ENV == "FLAGRUN":
