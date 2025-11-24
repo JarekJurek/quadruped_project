@@ -198,10 +198,10 @@ class QuadrupedGymEnv(gym.Env):
       self._observation_noise_stdev = 0.0
 
     self._randomize_cpg_params = randomize_cpg_params
-    self._h_min = 0.1,
-    self._h_max = 0.3,
-    self._g_c_min = 0.02, 
-    self._g_c_max = 0.2,
+    self._h_min = 0.1
+    self._h_max = 0.3
+    self._g_c_min = 0.02 
+    self._g_c_max = 0.2
 
     self.cpg_h_container = []
     self.cpg_g_c_container = []
@@ -431,6 +431,53 @@ class QuadrupedGymEnv(gym.Env):
             - 0.1 * np.linalg.norm(self.robot.GetBaseOrientation() - np.array([0,0,0,1]))
 
     return max(reward,0) # keep rewards positive
+  
+  def _reward_fwd_locomotion_custom(self, des_vel_x=None):
+    """Learn forward locomotion at a desired velocity."""
+    
+    # Velocity tracking reward
+    actual_vel_x = self.robot.GetBaseLinearVelocity()[0]
+    if des_vel_x is not None:
+        # Exponential reward for velocity tracking
+        vel_tracking_reward = 1.0 * np.exp(-((actual_vel_x - des_vel_x)**2) / 0.25)
+    else:
+        # Reward forward velocity with saturation
+        vel_tracking_reward = 1.0 * np.clip(actual_vel_x, 0.0, 1.0)
+    
+    # Penalize lateral drift
+    lateral_vel = self.robot.GetBaseLinearVelocity()[1]
+    drift_reward = -0.5 * lateral_vel**2
+    
+    # Penalize yaw deviation (go straight)
+    yaw = self.robot.GetBaseOrientationRollPitchYaw()[2]
+    yaw_reward = -0.5 * yaw**2
+    
+    # Penalize roll and pitch to maintain upright posture
+    roll, pitch, _ = self.robot.GetBaseOrientationRollPitchYaw()
+    orientation_reward = -1.0 * (roll**2 + pitch**2)
+    
+    # Energy penalty (instantaneous power, not accumulated)
+    if self._dt_motor_torques and self._dt_motor_velocities:
+        # Use only the most recent timestep
+        instantaneous_power = np.abs(np.dot(self._dt_motor_torques[-1], 
+                                            self._dt_motor_velocities[-1]))
+        energy_reward = -0.001 * instantaneous_power
+    else:
+        energy_reward = 0.0
+    
+    # Penalize vertical velocity (should stay at constant height)
+    vertical_vel = self.robot.GetBaseLinearVelocity()[2]
+    height_reward = -1.0 * vertical_vel**2
+    
+    # Total reward
+    reward = vel_tracking_reward \
+            + drift_reward \
+            + yaw_reward \
+            + orientation_reward \
+            + energy_reward \
+            + height_reward
+    
+    return reward  # Don't clamp to zero - allow negative rewards
 
   def get_distance_and_angle_to_goal(self):
     """ Helper to return distance and angle to current goal location. """
@@ -523,6 +570,8 @@ class QuadrupedGymEnv(gym.Env):
     """ Get reward depending on task"""
     if self._TASK_ENV == "FWD_LOCOMOTION":
       return self._reward_fwd_locomotion(des_vel_x=self._des_vel_x)
+    elif self._TASK_ENV == "FWD_CUSTOM":
+      return self._reward_fwd_locomotion_custom(des_vel_x=self._des_vel_x)
     elif self._TASK_ENV == "LR_COURSE_TASK":
       return self._reward_lr_course(des_vel_x=self._des_vel_x)
     elif self._TASK_ENV == "FLAGRUN":
