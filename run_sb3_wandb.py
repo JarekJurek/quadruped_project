@@ -262,6 +262,8 @@ def parse_arguments():
     parser.add_argument("--randomize_cpg_params", type=bool, default=True, help="Whether to randomize cpg params")
     parser.add_argument("--control_frequency", type=int, default=100, help="The control frequency of the policy [Hz]")
 
+    parser.add_argument("--randomize_velocity_command", type=bool, default=False, help="Whether to randomize velocity commands")
+
     # PPO Hyperparams
     parser.add_argument("--batch_size", type=int, default=8192, help="Size of rollout / batch size")
     parser.add_argument("--n_mini_batch", type=int, default=4, help="Number of minibatch")

@@ -27,4 +27,4 @@ source /zhome/d4/a/214319/miniconda3/bin/activate
 
 conda activate quadruped
 
-python run_sb3_wandb.py --project-name quadruped_rl --save-path /work3/s243600 --learning-alg PPO --num-envs 40 --task_env FWD_CUSTOM --des_x_vel 0.8 --total_timesteps 5000000 --learning_rate 3e-4
+python run_sb3_wandb.py --project-name quadruped_rl --save-path /work3/s243600 --learning-alg PPO --num-envs 40 --task_env FWD_CUSTOM --des_x_vel 0.8 --total_timesteps 5000000 --learning_rate 3e-4 --randomize_velocity_command True

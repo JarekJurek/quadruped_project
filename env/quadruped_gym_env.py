@@ -147,7 +147,7 @@ class QuadrupedGymEnv(gym.Env):
       des_h=0.25,
       des_g_c=0.07,
       randomize_cpg_params=False,
-      randomize_velocity_command=True,
+      randomize_velocity_command=False,
       **kwargs): # any extra arguments from legacy
     """Initialize the quadruped gym environment.
     Args:
