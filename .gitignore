@@ -3,3 +3,4 @@
 wandb/
 logs/
 *.err
+trained_models/

@@ -82,6 +82,7 @@ def load_sb3(args):
     env_config["des_x_vel"]=args.des_x_vel
     env_config["des_h"]=args.des_h
     env_config["des_g_c"]=args.des_g_c
+    env_config["terrain"]=args.terrain
 
     # get latest model and normalization stats, and plot 
     stats_path = os.path.join(log_dir, "vec_normalize.pkl")
@@ -139,6 +140,8 @@ def parse_arguments():
 
     parser.add_argument("--des_h", type=float, default=0.25, help="desired h - z of the body")
     parser.add_argument("--des_g_c", type=float, default=0.07, help="desired g_c - max z distance of a feet in swing phase")
+
+    parser.add_argument("--terrain", type=str, default="NONE", choices=["STAIRS", "SLOPES", "GAPS", "RANDOM", "NONE"], help="Terrain, obstacles")
     
     parser.add_argument("--learning-alg", type=str, default="PPO", choices=["PPO", "SAC"], help="Learning algorithm to use (default: PPO)")
     parser.add_argument("--motor_control_mode", type=str, default="CPG", choices=["CPG", "PD","TORQUE", "CARTESIAN_PD"], help="Motor control mode")
