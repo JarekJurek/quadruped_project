@@ -539,6 +539,53 @@ class QuadrupedGymEnv(gym.Env):
             - 0.001 * energy_reward 
     
     return max(reward,0) # keep rewards positive
+  
+  def _reward_fwd_obstables_custom(self, des_vel_x=None):
+    """Learn forward locomotion at a desired velocity."""
+    
+    # Velocity tracking reward
+    actual_vel_x = self.robot.GetBaseLinearVelocity()[0]
+    if des_vel_x is not None:
+        # Exponential reward for velocity tracking
+        vel_tracking_reward = 1.0 * np.exp(-((actual_vel_x - des_vel_x)**2) / 0.25)
+    else:
+        # Reward forward velocity with saturation
+        vel_tracking_reward = 1.0 * np.clip(actual_vel_x, 0.0, 1.0)
+    
+    # Penalize lateral drift
+    lateral_vel = self.robot.GetBaseLinearVelocity()[1]
+    drift_reward = -0.5 * lateral_vel**2
+    
+    # Penalize yaw deviation (go straight)
+    yaw = self.robot.GetBaseOrientationRollPitchYaw()[2]
+    yaw_reward = -0.5 * yaw**2
+    
+    # Penalize roll and pitch to maintain upright posture
+    roll, pitch, _ = self.robot.GetBaseOrientationRollPitchYaw()
+    orientation_reward = -1.0 * (roll**2 + pitch**2)
+    
+    # Energy penalty (instantaneous power, not accumulated)
+    if self._dt_motor_torques and self._dt_motor_velocities:
+        # Use only the most recent timestep
+        instantaneous_power = np.abs(np.dot(self._dt_motor_torques[-1], 
+                                            self._dt_motor_velocities[-1]))
+        energy_reward = -0.001 * instantaneous_power
+    else:
+        energy_reward = 0.0
+    
+    # Penalize vertical velocity (should stay at constant height)
+    vertical_vel = self.robot.GetBaseLinearVelocity()[2]
+    height_reward = -1.0 * vertical_vel**2
+    
+    # Total reward
+    reward = vel_tracking_reward \
+            + drift_reward \
+            + yaw_reward \
+            + energy_reward \
+            # + orientation_reward \
+            # + height_reward
+    
+    return reward  # Don't clamp to zero - allow negative rewards
     
   def _reward_lr_course(self, des_vel_x=None, des_vel_y=0., des_yaw_rate=0.):
     """ Implement your reward function here. How will you improve upon the above? """
@@ -595,6 +642,8 @@ class QuadrupedGymEnv(gym.Env):
       return self._reward_fwd_locomotion_basic()
     elif self._TASK_ENV == "LR_COURSE_TASK":
       return self._reward_lr_course(des_vel_x=self._des_vel_x)
+    elif self._TASK_ENV == "FWD_OBSTACLES_CUSTOM":
+      return self._reward_fwd_obstables_custom(des_vel_x=self._des_vel_x)
     elif self._TASK_ENV == "FLAGRUN":
       return self._reward_flag_run()
     else:
@@ -829,7 +878,7 @@ class QuadrupedGymEnv(gym.Env):
         if self._is_render:
           print('ground friction coefficient is', ground_mu_k)
 
-      if self._terrain is not None:
+      if self._terrain is not None and self._terrain != "NONE":
         if self._terrain == "SLOPES":
           self.add_slopes(pitch=0.2)
         elif self._terrain == "STAIRS":
@@ -1286,8 +1335,9 @@ class QuadrupedGymEnv(gym.Env):
 def test_env():
   env = QuadrupedGymEnv(render=True, 
                         on_rack=True,
-                        motor_control_mode='PD',
+                        # motor_control_mode='PD',
                         action_repeat=100,
+                        terrain="RANDOM"
                         )
 
   obs = env.reset()
