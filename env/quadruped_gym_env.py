@@ -144,6 +144,8 @@ class QuadrupedGymEnv(gym.Env):
       test_flagrun=False,
       max_episode_length=10.,
       des_vel_x=0.8,
+      des_h=0.25,
+      des_g_c=0.07,
       randomize_cpg_params=False,
       **kwargs): # any extra arguments from legacy
     """Initialize the quadruped gym environment.
@@ -202,6 +204,8 @@ class QuadrupedGymEnv(gym.Env):
     self._h_max = 0.3
     self._g_c_min = 0.02 
     self._g_c_max = 0.2
+    self.des_h = des_h
+    self.des_g_c = des_g_c
 
     self.cpg_h_container = []
     self.cpg_g_c_container = []
@@ -783,6 +787,9 @@ class QuadrupedGymEnv(gym.Env):
     # Randomize CPG parameters for domain randomization
     if self._randomize_cpg_params:
       self._randomize_cpg_parameters()
+    else:
+      self._cpg._robot_height = self.des_h
+      self._cpg._ground_clearance = self.des_g_c
 
     # Disable rendering when setting up models (otherwise too slow)
     if self._is_render:
