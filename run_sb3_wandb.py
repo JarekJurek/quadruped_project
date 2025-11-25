@@ -59,7 +59,7 @@ def run_sb3(args):
                    "randomize_cpg_params": args.randomize_cpg_params,
                    "action_repeat": action_repeat,
                    "des_vel_x": args.des_x_vel,
-                   "terrain": args.terrainl}
+                   "terrain": args.terrain}
     
     # Log environment configuration to wandb
     wandb.config.update({"env_configs": env_configs})
