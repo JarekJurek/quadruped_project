@@ -217,7 +217,7 @@ class QuadrupedGymEnv(gym.Env):
     self._des_vel_x_max = 2.0
     self.des_vel_x_container = []
 
-    self._sample_vel_interval = 5.0
+    self._sample_vel_interval = 4.0
 
     # other bookkeeping 
     self._num_bullet_solver_iterations = int(300 / action_repeat) 
