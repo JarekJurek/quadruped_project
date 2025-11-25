@@ -58,7 +58,9 @@ def run_sb3(args):
                    "max_episode_length": args.max_episode_length,
                    "randomize_cpg_params": args.randomize_cpg_params,
                    "action_repeat": action_repeat,
-                   "des_vel_x": args.des_x_vel}
+                   "des_vel_x": args.des_x_vel,
+                   "des_vel_x_min": args.des_vel_x_min,
+                   "des_vel_x_max": args.des_vel_x_max}
     
     # Log environment configuration to wandb
     wandb.config.update({"env_configs": env_configs})
@@ -138,28 +140,37 @@ def run_sb3(args):
                 "seed":None, 
                 "device": gpu_arg}
 
-    #Load model
+    # Load model if specified
     if args.load_nn:
-        interm_dir = f"{args.save_path}/logs/intermediate_models/{args.project_name}"
-        log_dir = interm_dir + '' # add path
-        stats_path = os.path.join(log_dir, "vec_normalize.pkl")
-        model_name = get_latest_model(log_dir)
-        
-        wandb.config.update({
-            "loaded_model_path": model_name,
-            "loaded_stats_path": stats_path
-        })
+        try:
+            log_dir = args.load_model_path
+            stats_path = os.path.join(log_dir, "vec_normalize.pkl")
+            model_name = get_latest_model(log_dir)
+            
+            wandb.config.update({
+                "loaded_model_path": model_name,
+                "loaded_stats_path": stats_path
+            })
 
-        env = VecNormalize.load(stats_path, env)
+            # Load VecNormalize statistics
+            env = VecNormalize.load(stats_path, env)
+            env.training = True
+            env.norm_reward = False
 
-        if args.learning_alg == "PPO":
-            model = PPO.load(model_name, env)
-        elif args.learning_alg == "SAC":
-            model = SAC.load(model_name, env)
-        else:
-            raise ValueError(args.learning_alg + ' not implemented')
-        print("\nLoaded model", model_name, "\n")
-        wandb.log({"model_loaded": True, "loaded_model_name": model_name})
+            # Load the model based on the specified algorithm
+            if args.learning_alg == "PPO":
+                model = PPO.load(model_name, env, device=gpu_arg)
+            elif args.learning_alg == "SAC":
+                model = SAC.load(model_name, env, device=gpu_arg)
+            else:
+                raise ValueError(f"{args.learning_alg} not implemented")
+            
+            print(f"\nLoaded model: {model_name}\n")
+            wandb.log({"model_loaded": True, "loaded_model_name": model_name})
+        except Exception as e:
+            tb_str = traceback.format_exc()
+            print(f"Failed to load pretrained model. Training from scratch. Error: {e}\n{tb_str}")
+            wandb.log({"model_loading_failed": True, "error_message": str(e), "traceback": tb_str})
     #Create new model
     else:
         if args.learning_alg == "PPO":
@@ -247,14 +258,16 @@ def parse_arguments():
     parser.add_argument("--motor_control_mode", type=str, default="CPG", choices=["CPG", "PD","TORQUE", "CARTESIAN_PD"], help="Motor control mode")
     parser.add_argument("--observation_space_mode", type=str, default="LR_COURSE_OBS", choices=["DEFAULT", "LR_COURSE_OBS"], help="Observation space mode")
     parser.add_argument("--task_env", type=str, default="LR_COURSE_TASK", choices=["LR_COURSE_TASK", "FLAGRUN","FWD_LOCOMOTION", "FWD_CUSTOM", "FWD_BASIC"], help="Task to be executed")
-    parser.add_argument("--load-nn", action="store_true", help="Initialize training with a previous model")
     parser.add_argument("--num-envs", type=int, default=1, help="Number of pybullet environments to create for data collection (default: 1)")
     parser.add_argument("--use-gpu", action="store_true", help="Use GPU for training (make sure to install all necessary drivers)")
     parser.add_argument("--save-path", type=str, help="Path for storing intermediate models", default=".")
 
+    parser.add_argument("--load-nn", action="store_true", help="Initialize training with a previous model")
+    parser.add_argument("--load_model_path", type=str, help="Path for loading pretrained model", default=".")
 
     parser.add_argument("--des_x_vel", type=float, default=0.4, help="desired linear velocity x axis")
-
+    parser.add_argument("--des_vel_x_min", type=float, default=0.3, help="desired linear velocity x axis")
+    parser.add_argument("--des_vel_x_max", type=float, default=0.8, help="desired linear velocity x axis")
 
     parser.add_argument("--total_timesteps", type=int, default=1000000, help="Total timesteps")
     parser.add_argument("--time_step", type=float, default=0.001, help="time step, for CPG_RL 0.01 s")
