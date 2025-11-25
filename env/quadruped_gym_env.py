@@ -147,6 +147,7 @@ class QuadrupedGymEnv(gym.Env):
       des_h=0.25,
       des_g_c=0.07,
       randomize_cpg_params=False,
+      randomize_velocity_command=True,
       **kwargs): # any extra arguments from legacy
     """Initialize the quadruped gym environment.
     Args:
@@ -210,9 +211,10 @@ class QuadrupedGymEnv(gym.Env):
     self.cpg_h_container = []
     self.cpg_g_c_container = []
 
+    self.randomize_velocity_command = randomize_velocity_command
     self._des_vel_x = des_vel_x
-    self._des_vel_x_min = 0.01
-    self._des_vel_x_max = 1.0
+    self._des_vel_x_min = 0.1
+    self._des_vel_x_max = 2.0
     self.des_vel_x_container = []
 
     self._sample_vel_interval = 5.0
@@ -749,7 +751,7 @@ class QuadrupedGymEnv(gym.Env):
       if self._is_render:
         self._render_step_helper()
 
-    if self.get_sim_time() % self._sample_vel_interval < self._time_step * self._action_repeat:
+    if self.get_sim_time() % self._sample_vel_interval < self._time_step * self._action_repeat and self.randomize_velocity_command:
       self.sample_vel_command()
 
     self._last_action = curr_act
@@ -869,7 +871,7 @@ class QuadrupedGymEnv(gym.Env):
     return self._noisy_observation(), self._get_info()
   
   def sample_vel_command(self):
-    self._des_vel_x = np.random.uniform(self._h_min, self._h_max)
+    self._des_vel_x = np.random.uniform(self._des_vel_x_min, self._des_vel_x_max)
     self.des_vel_x_container.append(self._des_vel_x)
   
   def _randomize_cpg_parameters(self):
@@ -1117,7 +1119,6 @@ class QuadrupedGymEnv(gym.Env):
                           basePosition = [x_upp/2,y_low,0.5],baseOrientation=orn)
     block2=self._pybullet_client.createMultiBody(baseMass=0,baseCollisionShapeIndex = sh_colBox,
                           basePosition = [x_upp/2,-y_low,0.5],baseOrientation=orn)
-
 
   def add_gaps(self, num_gaps=5, gap_width=0.1, between_gaps_width=2):
     """Add N gaps
