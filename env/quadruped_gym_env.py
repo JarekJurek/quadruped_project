@@ -148,6 +148,8 @@ class QuadrupedGymEnv(gym.Env):
       des_g_c=0.07,
       randomize_cpg_params=False,
       randomize_velocity_command=False,
+      des_vel_x_min=0.3,
+      des_vel_x_max=0.8,
       **kwargs): # any extra arguments from legacy
     """Initialize the quadruped gym environment.
     Args:
@@ -213,8 +215,8 @@ class QuadrupedGymEnv(gym.Env):
 
     self.randomize_velocity_command = randomize_velocity_command
     self._des_vel_x = des_vel_x
-    self._des_vel_x_min = 0.1
-    self._des_vel_x_max = 2.0
+    self._des_vel_x_min = des_vel_x_min
+    self._des_vel_x_max = des_vel_x_max
     self.des_vel_x_container = []
 
     self._sample_vel_interval = 4.0
