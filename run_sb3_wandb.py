@@ -60,7 +60,8 @@ def run_sb3(args):
                    "action_repeat": action_repeat,
                    "des_vel_x": args.des_x_vel,
                    "des_vel_x_min": args.des_vel_x_min,
-                   "des_vel_x_max": args.des_vel_x_max}
+                   "des_vel_x_max": args.des_vel_x_max,
+                   "terrain": args.terrain}
     
     # Log environment configuration to wandb
     wandb.config.update({"env_configs": env_configs})
@@ -276,6 +277,8 @@ def parse_arguments():
     parser.add_argument("--control_frequency", type=int, default=100, help="The control frequency of the policy [Hz]")
 
     parser.add_argument("--randomize_velocity_command", type=bool, default=False, help="Whether to randomize velocity commands")
+
+    parser.add_argument("--terrain", type=str, default="NONE", choices=["STAIRS", "SLOPES", "GAPS", "RANDOM", "NONE"], help="Terrain, obstacles")
 
     # PPO Hyperparams
     parser.add_argument("--batch_size", type=int, default=8192, help="Size of rollout / batch size")
