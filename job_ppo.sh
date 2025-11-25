@@ -3,7 +3,7 @@
 ### –- specify queue --
 #BSUB -q hpc
 ### -- set the job Name --
-#BSUB -J quadruped_rl_ppo_30_cores_100_envs
+#BSUB -J quadruped_rl_ppo_basic_rew_20_s_lr_custom_rand_vel
 ### -- ask for number of cores (default: 1) --
 #BSUB -n 30
 ### -- Set the span of the job to 1 node --
@@ -27,4 +27,4 @@ source /zhome/d4/a/214319/miniconda3/bin/activate
 
 conda activate quadruped
 
-python run_sb3_wandb.py --project-name quadruped_rl --save-path /work3/s243600 --learning-alg PPO --num-envs 40 --task_env FWD_CUSTOM --des_x_vel 0.8 --total_timesteps 5000000 --learning_rate 3e-4 --randomize_velocity_command True
+python run_sb3_wandb.py --project-name quadruped_rl --save-path /work3/s243600 --learning-alg PPO --num-envs 40 --task_env FWD_CUSTOM --des_x_vel 0.8 --total_timesteps 5000000 --learning_rate 3e-4 --max_episode_length 20 --randomize_velocity_command True
