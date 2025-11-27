@@ -111,7 +111,12 @@ def load_sb3(args):
 
     # [TODO] initialize arrays to save data from simulation 
 
+    base_pos = np.zeros((3, args.sim_time))
+    base_vel = np.zeros((3, args.sim_time))
+    t = np.arange(args.sim_time) * 0.001
+
     for i in range(args.sim_time):
+        print(f"sim time: {i}")
         action, _states = model.predict(obs,deterministic=False) # sample at test time? ([TODO]: test if the outputs make sense)
         obs, rewards, dones, info = env.step(action)
         episode_reward += rewards
@@ -121,10 +126,39 @@ def load_sb3(args):
             print('Final base position', info[0]['base_pos'])
             episode_reward = 0
 
+        robot = env.envs[0].unwrapped.robot
+        base_pos[:, i] = robot.GetBasePosition()
+        base_vel[:, i] = robot.GetBaseLinearVelocity()
+
         # [TODO] save data from current robot states for plots 
         # To get base position, for example: env.envs[0].env.robot.GetBasePosition() 
         
     # [TODO] make plots
+
+    fig1, axes1 = plt.subplots(3, 1, figsize=(10, 12), sharex=True)
+    fig1.suptitle('Base Position', fontsize=16)
+    labels_pos = ['X', 'Y', 'Z']
+    
+    for i in range(3):
+        axes1[i].plot(t, base_pos[i, :], linewidth=2)
+        axes1[i].set_ylabel(f'{labels_pos[i]} [m]')
+        axes1[i].grid(True, alpha=0.3)
+    axes1[2].set_xlabel('Time [s]')
+    plt.tight_layout()
+    plt.show()
+
+    # Plot Base Velocity
+    fig2, axes2 = plt.subplots(3, 1, figsize=(10, 12), sharex=True)
+    fig2.suptitle('Base Velocity', fontsize=16)
+    labels_vel = ['Vx', 'Vy', 'Vz']
+    
+    for i in range(3):
+        axes2[i].plot(t, base_vel[i, :], linewidth=2)
+        axes2[i].set_ylabel(f'{labels_vel[i]} [m/s]')
+        axes2[i].grid(True, alpha=0.3)
+    axes2[2].set_xlabel('Time [s]')
+    plt.tight_layout()
+    plt.show()
 
 
 def parse_arguments():
@@ -134,7 +168,7 @@ def parse_arguments():
     parser.add_argument("--record_video", type=bool, default=False, help="Record video flag")
     parser.add_argument("--add_noise", type=bool, default=False, help="Add noise flag")
 
-    parser.add_argument("--sim_time", type=int, default=5000, help="Duration of the simulation in miliseconds (has to be integer)")
+    parser.add_argument("--sim_time", type=int, default=500, help="Duration of the simulation in miliseconds (has to be integer)")
 
     parser.add_argument("--des_x_vel", type=float, default=0.4, help="desired linear velocity x axis")
 
