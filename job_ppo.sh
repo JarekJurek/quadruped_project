@@ -3,13 +3,13 @@
 ### –- specify queue --
 #BSUB -q hpc
 ### -- set the job Name --
-#BSUB -J quadruped_rl_ppo_new_obs
+#BSUB -J quadruped_rl_ppo_adapt_lr_finetune
 ### -- ask for number of cores (default: 1) --
 #BSUB -n 30
 ### -- Set the span of the job to 1 node --
 #BSUB -R "span[hosts=1]"
 ### -- set walltime limit: hh:mm --  maximum 24 hours for GPU-queues right now
-#BSUB -W 5:00
+#BSUB -W 4:00
 # request system-memory
 #BSUB -R "rusage[mem=4GB]"
 #BSUB -R "select[model==XeonGold6226R]"
@@ -27,4 +27,4 @@ source /zhome/d4/a/214319/miniconda3/bin/activate
 
 conda activate quadruped
 
-python run_sb3_wandb.py --project-name quadruped_rl --run-name new_obs_vel --save-path /work3/s243600 --learning-alg PPO --num-envs 40 --task_env FWD_CUSTOM --observation_space_mode LR_COURSE_OBS_EXTENDED --total_timesteps 3000000 --learning_rate 3e-4 --max_episode_length 20 --randomize_velocity_command
+python run_sb3_wandb.py --project-name quadruped_rl --run-name adaptive_lr_adapt_vel_finetune --save-path /work3/s243600 --learning-alg PPO --num-envs 40 --task_env FWD_CUSTOM --observation_space_mode LR_COURSE_OBS_EXTENDED --total_timesteps 3000000 --learning_rate 3e-4 --max_episode_length 20 --randomize_velocity_command --learning_rate_adaptive --load-nn --load_model_path /work3/s243600/logs/intermediate_models/quadruped_rl/new_obs_vel/112725175937
