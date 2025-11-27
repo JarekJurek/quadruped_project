@@ -295,6 +295,7 @@ def parse_arguments():
     parser.add_argument("--randomize_velocity_command", action="store_true", help="Whether to randomize velocity commands")
 
     parser.add_argument("--terrain", type=str, default="NONE", choices=["STAIRS", "SLOPES", "GAPS", "RANDOM", "NONE"], help="Terrain, obstacles")
+    parser.add_argument("--terrain_difficulty", type=int, default=5, help="Levels of difficulty of obstacles")
 
     # PPO Hyperparams
     parser.add_argument("--batch_size", type=int, default=8192, help="Size of rollout / batch size")
