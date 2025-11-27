@@ -29,7 +29,8 @@ class CustomCallback(BaseCallback):
 
     :param verbose: Verbosity level: 0 for no output, 1 for info messages, 2 for debug messages
     """
-    def __init__(self, verbose: int = 0, learning_rate_adaptive=False, target_kl=0.01):
+    def __init__(self, verbose: int = 0, learning_rate_adaptive=False, target_kl=0.01, 
+                 total_timesteps=1000000, terrain_difficulty=1, max_num_stairs=10):
         super().__init__(verbose)
         # Those variables will be accessible in the callback
         # (they are defined in the base class)
@@ -52,6 +53,11 @@ class CustomCallback(BaseCallback):
         self.learning_rate_adaptive = learning_rate_adaptive
         self.target_kl = target_kl
         self.current_lr = None
+
+        self.total_timesteps_train = total_timesteps
+        self.terrain_difficulty_levels = terrain_difficulty
+        self.max_num_stairs = max_num_stairs
+        self.last_set_stairs = -1
 
     def _on_training_start(self) -> None:
         """
@@ -83,6 +89,37 @@ class CustomCallback(BaseCallback):
             # 3. Apply the new learning rate to the optimizer
             self._update_learning_rate(self.current_lr)
             self.logger.record("train/learning_rate_adaptive", self.current_lr)
+
+        if self.terrain_difficulty_levels > 0 and self.max_num_stairs > 0:
+            # Calculate how many steps constitute one "level"
+            steps_per_level = self.total_timesteps_train / self.terrain_difficulty_levels
+            
+            # Determine current level (1-based index)
+            # e.g., if total=1M, levels=5: 0-200k is Level 1, 200k-400k is Level 2...
+            current_level = int(self.num_timesteps / steps_per_level) + 1
+            
+            # Clamp to max difficulty
+            current_level = min(current_level, self.terrain_difficulty_levels)
+            
+            # Calculate number of stairs for this difficulty level
+            # Formula scales linearly: Level 1 gets (1/N)*Max, Level N gets (N/N)*Max
+            new_num_stairs = int((current_level / self.terrain_difficulty_levels) * self.max_num_stairs)
+            
+            # Ensure at least 1 stair if we are in the curriculum logic
+            new_num_stairs = max(1, new_num_stairs)
+
+            # Only update environment if the number of stairs has changed
+            if new_num_stairs != self.last_set_stairs:
+                if self.verbose > 0:
+                    print(f"Curriculum Update at step {self.num_timesteps}: Difficulty Level {current_level}/{self.terrain_difficulty_levels}, Num Stairs set to {new_num_stairs}")
+                
+                # Update the environment variable
+                self.training_env.set_attr("num_stairs", new_num_stairs)
+                self.last_set_stairs = new_num_stairs
+            
+            # Record curriculum state
+            self.logger.record("train/curriculum_level", current_level)
+            self.logger.record("train/current_num_stairs", new_num_stairs)
 
     def _update_learning_rate(self, new_lr):
         self.model.learning_rate = new_lr # Update SB3 internal tracker
@@ -158,7 +195,10 @@ def run_sb3(args):
                    "des_vel_x_min": args.des_vel_x_min,
                    "des_vel_x_max": args.des_vel_x_max,
                    "terrain": args.terrain,
-                   "randomize_velocity_command": args.randomize_velocity_command}
+                   "randomize_velocity_command": args.randomize_velocity_command,
+                   "num_stairs": args.num_stairs,
+                   "stair_height": args.stair_height,
+                   "stair_width": args.stair_width,}
     
     # Log environment configuration to wandb
     wandb.config.update({"env_configs": env_configs})
@@ -187,7 +227,15 @@ def run_sb3(args):
     #     gradient_save_freq=100,
     #     # verbose=1,
     # )
-    custom_callback = CustomCallback(verbose=2, learning_rate_adaptive=args.learning_rate_adaptive, target_kl=args.des_kl_divergence)
+    custom_callback = CustomCallback(
+        verbose=2, 
+        learning_rate_adaptive=args.learning_rate_adaptive, 
+        target_kl=args.des_kl_divergence,
+        # Curriculum arguments:
+        total_timesteps=args.total_timesteps,
+        terrain_difficulty=args.terrain_difficulty,
+        max_num_stairs=args.num_stairs
+    )
 
     # create Vectorized gym environment
     env = lambda: QuadrupedGymEnv(**env_configs)  
@@ -393,6 +441,9 @@ def parse_arguments():
 
     parser.add_argument("--terrain", type=str, default="NONE", choices=["STAIRS", "SLOPES", "GAPS", "RANDOM", "NONE"], help="Terrain, obstacles")
     parser.add_argument("--terrain_difficulty", type=int, default=5, help="Levels of difficulty of obstacles")
+    parser.add_argument("--num_stairs", type=int, default=12, help="desired h - z of the body")
+    parser.add_argument("--stair_height", type=float, default=0.05, help="desired h - z of the body")
+    parser.add_argument("--stair_width", type=float, default=0.25, help="desired h - z of the body")
 
     # PPO Hyperparams
     parser.add_argument("--batch_size", type=int, default=8192, help="Size of rollout / batch size")
