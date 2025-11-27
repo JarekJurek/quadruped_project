@@ -29,7 +29,7 @@ class CustomCallback(BaseCallback):
 
     :param verbose: Verbosity level: 0 for no output, 1 for info messages, 2 for debug messages
     """
-    def __init__(self, verbose: int = 0, learning_rate_adaptive=False):
+    def __init__(self, verbose: int = 0, learning_rate_adaptive=False, target_kl=0.01):
         super().__init__(verbose)
         # Those variables will be accessible in the callback
         # (they are defined in the base class)
@@ -50,12 +50,14 @@ class CustomCallback(BaseCallback):
         # to have access to the parent object
         # self.parent = None  # type: Optional[BaseCallback]
         self.learning_rate_adaptive = learning_rate_adaptive
+        self.target_kl = target_kl
+        self.current_lr = None
 
     def _on_training_start(self) -> None:
         """
         This method is called before the first rollout starts.
         """
-        pass
+        self.current_lr = self.model.policy.optimizer.param_groups[0]["lr"]
 
     def _on_rollout_start(self) -> None:
         """
@@ -185,7 +187,7 @@ def run_sb3(args):
     #     gradient_save_freq=100,
     #     # verbose=1,
     # )
-    custom_callback = CustomCallback(verbose=2, learning_rate_adaptive=args.learning_rate_adaptive)
+    custom_callback = CustomCallback(verbose=2, learning_rate_adaptive=args.learning_rate_adaptive, target_kl=args.des_kl_divergence)
 
     # create Vectorized gym environment
     env = lambda: QuadrupedGymEnv(**env_configs)  
