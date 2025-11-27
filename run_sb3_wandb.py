@@ -61,7 +61,8 @@ def run_sb3(args):
                    "des_vel_x": args.des_x_vel,
                    "des_vel_x_min": args.des_vel_x_min,
                    "des_vel_x_max": args.des_vel_x_max,
-                   "terrain": args.terrain}
+                   "terrain": args.terrain,
+                   "randomize_velocity_command": args.randomize_velocity_command}
     
     # Log environment configuration to wandb
     wandb.config.update({"env_configs": env_configs})
@@ -226,9 +227,9 @@ def run_sb3(args):
         "worker_completed": True,
         "total_training_steps": args.total_timesteps,
         "algorithm_used": args.learning_alg,
-        "cpg_h": env.cpg_h_container,
-        "cpg_g_c": env.cpg_g_c_container,
-        "des_vel_x": env.des_vel_x_container,
+        # "cpg_h": env.cpg_h_container,
+        # "cpg_g_c": env.cpg_g_c_container,
+        # "des_vel_x": env.des_vel_x_container,
     })
 
     # Finish wandb run
