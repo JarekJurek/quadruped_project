@@ -294,6 +294,7 @@ class QuadrupedGymEnv(gym.Env):
         np.array([5.0] * 4), # dr
         np.array([np.pi] * 4), # theta
         np.array([4.5 * 2 * np.pi] * 4), # dtheta
+        np.array([self._des_vel_x_max]), # desired x velocity
       )) + OBSERVATION_EPS)
 
       observation_low = (np.concatenate((
@@ -307,7 +308,8 @@ class QuadrupedGymEnv(gym.Env):
         np.array([MU_LOW] * 4), # r
         np.array([-5.0] * 4), # dr
         np.array([-np.pi] * 4), # theta
-        np.array([-4.5 * 2 * np.pi] * 4), # dtheta
+        np.array([-4.5 * 2 * np.pi] * 4), # dtheta,
+        np.array([self._des_vel_x_min]), # desired x velocity
       )) + OBSERVATION_EPS)
     
     else:
@@ -367,7 +369,8 @@ class QuadrupedGymEnv(gym.Env):
                                           self._cpg.get_r(), 
                                           self._cpg.get_dr(),
                                           self._cpg.get_theta(),
-                                          self._cpg.get_dtheta()))
+                                          self._cpg.get_dtheta(),
+                                          np.array([self._des_vel_x])))
       expected_size = self.observation_space.shape[0]
       if self._observation.shape[0] != expected_size:
         raise ValueError(f"Observation shape mismatch: got {self._observation.shape[0]}, expected {expected_size}")
@@ -794,6 +797,9 @@ class QuadrupedGymEnv(gym.Env):
     else:
       self._cpg._robot_height = self.des_h
       self._cpg._ground_clearance = self.des_g_c
+
+    if self.randomize_velocity_command:
+      self.sample_vel_command()
 
     # Disable rendering when setting up models (otherwise too slow)
     if self._is_render:
