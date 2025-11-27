@@ -294,6 +294,35 @@ class QuadrupedGymEnv(gym.Env):
         np.array([5.0] * 4), # dr
         np.array([np.pi] * 4), # theta
         np.array([4.5 * 2 * np.pi] * 4), # dtheta
+      )) + OBSERVATION_EPS)
+
+      observation_low = (np.concatenate((
+        np.array([-1.0] * 4), # base orientation in quaternions
+        np.array([-19.] * 3), # body linear velocity
+        np.array([-5.0] * 3), # base angular velocity
+        self._robot_config.LOWER_ANGLE_JOINT, # joint position
+        -self._robot_config.VELOCITY_LIMITS, # joint velocities
+        np.array([0.] * 4), # foot contact booleans
+        np.array([-1.0] * 8), # last policy action
+        np.array([MU_LOW] * 4), # r
+        np.array([-5.0] * 4), # dr
+        np.array([-np.pi] * 4), # theta
+        np.array([-4.5 * 2 * np.pi] * 4), # dtheta,
+      )) + OBSERVATION_EPS)
+    
+    elif self._observation_space_mode == "LR_COURSE_OBS_EXTENDED":       
+      observation_high = (np.concatenate((
+        np.array([1.0] * 4), # base orientation in quaternions
+        np.array([19.] * 3), # body linear velocity
+        np.array([5.] * 3), # base angular velocity
+        self._robot_config.UPPER_ANGLE_JOINT, # joint position
+        self._robot_config.VELOCITY_LIMITS, # joint velocities
+        np.array([1.0] * 4), # foot contact booleans
+        np.array([1.0] * 8), # last policy action
+        np.array([MU_UPP] * 4), # r
+        np.array([5.0] * 4), # dr
+        np.array([np.pi] * 4), # theta
+        np.array([4.5 * 2 * np.pi] * 4), # dtheta
         np.array([self._des_vel_x_max]), # desired x velocity
       )) + OBSERVATION_EPS)
 
@@ -337,6 +366,43 @@ class QuadrupedGymEnv(gym.Env):
                                           self.robot.GetMotorVelocities(),
                                           self.robot.GetBaseOrientation() ))
     elif self._observation_space_mode == "LR_COURSE_OBS":
+      # [TODO] Get observation from robot. What are reasonable measurements we could get on hardware?
+      # if using the CPG, you can include states with self._cpg.get_r(), for example
+      # 50 is arbitrary
+
+      # WE CAN ADD FOOT CONTACT BOOLEANS AND CPG STATES AS ANOTHER OBSERVATION
+
+      """
+      full observation:
+      - body orientation
+      - body linear velocity
+      - body angular velocity
+      - joint position
+      - joint velocities
+      - foot contact booleans
+      - last policy action
+      - CPG states
+        - r
+        - dr
+        - theta
+        - dtheta
+      """
+
+      self._observation = np.concatenate((self.robot.GetBaseOrientation(),
+                                          self.robot.GetBaseLinearVelocity(),
+                                          self.robot.GetBaseAngularVelocity(),
+                                          self.robot.GetMotorAngles(),
+                                          self.robot.GetMotorVelocities(),
+                                          np.array(self.robot.GetContactInfo()[3]),
+                                          self._last_action,
+                                          self._cpg.get_r(), 
+                                          self._cpg.get_dr(),
+                                          self._cpg.get_theta(),
+                                          self._cpg.get_dtheta(),))
+      expected_size = self.observation_space.shape[0]
+      if self._observation.shape[0] != expected_size:
+        raise ValueError(f"Observation shape mismatch: got {self._observation.shape[0]}, expected {expected_size}")
+    elif self._observation_space_mode == "LR_COURSE_OBS_EXTENDED":
       # [TODO] Get observation from robot. What are reasonable measurements we could get on hardware?
       # if using the CPG, you can include states with self._cpg.get_r(), for example
       # 50 is arbitrary
