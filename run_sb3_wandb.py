@@ -227,9 +227,9 @@ def run_sb3(args):
         "worker_completed": True,
         "total_training_steps": args.total_timesteps,
         "algorithm_used": args.learning_alg,
-        # "cpg_h": env.cpg_h_container,
-        # "cpg_g_c": env.cpg_g_c_container,
-        # "des_vel_x": env.des_vel_x_container,
+        "cpg_h": env.cpg_h_container,
+        "cpg_g_c": env.cpg_g_c_container,
+        "des_vel_x": env.des_vel_x_container,
     })
 
     # Finish wandb run
@@ -277,7 +277,7 @@ def parse_arguments():
     parser.add_argument("--randomize_cpg_params", type=bool, default=True, help="Whether to randomize cpg params")
     parser.add_argument("--control_frequency", type=int, default=100, help="The control frequency of the policy [Hz]")
 
-    parser.add_argument("--randomize_velocity_command", type=bool, default=False, help="Whether to randomize velocity commands")
+    parser.add_argument("--randomize_velocity_command", action="store_true", help="Whether to randomize velocity commands")
 
     parser.add_argument("--terrain", type=str, default="NONE", choices=["STAIRS", "SLOPES", "GAPS", "RANDOM", "NONE"], help="Terrain, obstacles")
 
