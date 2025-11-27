@@ -150,6 +150,9 @@ class QuadrupedGymEnv(gym.Env):
       randomize_velocity_command=False,
       des_vel_x_min=0.3,
       des_vel_x_max=0.8,
+      num_stairs=12, 
+      stair_height=0.05, 
+      stair_width=0.25,
       **kwargs): # any extra arguments from legacy
     """Initialize the quadruped gym environment.
     Args:
@@ -220,6 +223,10 @@ class QuadrupedGymEnv(gym.Env):
     self.des_vel_x_container = []
 
     self._sample_vel_interval = 4.0
+
+    self.num_stairs = num_stairs, 
+    self.stair_height = stair_height, 
+    self.stair_width = stair_width,
 
     # other bookkeeping 
     self._num_bullet_solver_iterations = int(300 / action_repeat) 
@@ -907,7 +914,7 @@ class QuadrupedGymEnv(gym.Env):
         if self._terrain == "SLOPES":
           self.add_slopes(pitch=0.2)
         elif self._terrain == "STAIRS":
-          self.add_stairs(num_stairs=12, stair_height=0.05, stair_width=0.25)
+          self.add_stairs(num_stairs=self.num_stairs, stair_height=self.stair_height, stair_width=self.stair_width)
         elif self._terrain == "GAPS":
           self.add_gaps(num_gaps=5, gap_width=0.1, between_gaps_width=2)
         elif self._terrain == "RANDOM":
@@ -946,7 +953,8 @@ class QuadrupedGymEnv(gym.Env):
   
   def sample_vel_command(self):
     self._des_vel_x = np.random.uniform(self._des_vel_x_min, self._des_vel_x_max)
-    self.des_vel_x_container.append(self._des_vel_x)
+    if self._des_vel_x not in self.des_vel_x_container:
+      self.des_vel_x_container.append(self._des_vel_x)
   
   def _randomize_cpg_parameters(self):
     """Randomize CPG height and ground clearance parameters for domain randomization."""
@@ -955,8 +963,10 @@ class QuadrupedGymEnv(gym.Env):
     random_height = np.random.uniform(self._h_min, self._h_max)
     random_ground_clearance = np.random.uniform(self._g_c_min, self._g_c_max)
 
-    self.cpg_h_container.append(random_height)
-    self.cpg_g_c_container.append(random_ground_clearance)
+    if random_height not in self.cpg_h_container:
+      self.cpg_h_container.append(random_height)
+    if random_ground_clearance not in self.cpg_g_c_container:
+      self.cpg_g_c_container.append(random_ground_clearance)
     
     # Update CPG parameters
     self._cpg._robot_height = random_height

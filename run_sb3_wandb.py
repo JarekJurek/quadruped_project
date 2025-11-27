@@ -23,6 +23,78 @@ from utils.file_utils import get_latest_model
 from utils.utils import CheckpointCallback
 
 
+class CustomCallback(BaseCallback):
+    """
+    A custom callback that derives from ``BaseCallback``.
+
+    :param verbose: Verbosity level: 0 for no output, 1 for info messages, 2 for debug messages
+    """
+    def __init__(self, verbose: int = 0):
+        super().__init__(verbose)
+        # Those variables will be accessible in the callback
+        # (they are defined in the base class)
+        # The RL model
+        # self.model = None  # type: BaseAlgorithm
+        # An alias for self.model.get_env(), the environment used for training
+        # self.training_env # type: VecEnv
+        # Number of time the callback was called
+        # self.n_calls = 0  # type: int
+        # num_timesteps = n_envs * n times env.step() was called
+        # self.num_timesteps = 0  # type: int
+        # local and global variables
+        # self.locals = {}  # type: Dict[str, Any]
+        # self.globals = {}  # type: Dict[str, Any]
+        # The logger object, used to report things in the terminal
+        # self.logger # type: stable_baselines3.common.logger.Logger
+        # Sometimes, for event callback, it is useful
+        # to have access to the parent object
+        # self.parent = None  # type: Optional[BaseCallback]
+
+    def _on_training_start(self) -> None:
+        """
+        This method is called before the first rollout starts.
+        """
+        pass
+
+    def _on_rollout_start(self) -> None:
+        """
+        A rollout is the collection of environment interaction
+        using the current policy.
+        This event is triggered before collecting new samples.
+        """
+        pass
+
+    def _on_step(self) -> bool:
+        """
+        This method will be called by the model after each call to `env.step()`.
+
+        For child callback (of an `EventCallback`), this will be called
+        when the event is triggered.
+
+        :return: If the callback returns False, training is aborted early.
+        """
+        return True
+
+    def _on_rollout_end(self) -> None:
+        """
+        This event is triggered before updating the policy.
+        """
+        cpg_h_container = self.training_env.get_attr("cpg_h_container")
+        cpg_g_c_container = self.training_env.get_attr("cpg_g_c_container")
+        des_vel_x_container = self.training_env.get_attr("des_vel_x_container")
+        wandb.log({
+            "cpg_h_container": cpg_h_container,
+            "cpg_g_c_container": cpg_g_c_container,
+            "des_vel_x_container": des_vel_x_container
+        })
+
+    def _on_training_end(self) -> None:
+        """
+        This event is triggered before exiting the `learn()` method.
+        """
+        pass
+
+
 def run_sb3(args):
     # Get worker ID from LSF environment (or default for local testing)
     worker_id = int(os.getenv('LSB_JOBINDEX', '1'))
@@ -96,6 +168,7 @@ def run_sb3(args):
     #     gradient_save_freq=100,
     #     # verbose=1,
     # )
+    custom_callback = CustomCallback(verbose=2)
 
     # create Vectorized gym environment
     env = lambda: QuadrupedGymEnv(**env_configs)  
@@ -103,6 +176,8 @@ def run_sb3(args):
 
     # normalize observations to stabilize learning (why?)
     env = VecNormalize(env, norm_obs=True, norm_reward=False, clip_obs=100.)
+
+
 
     # Multi-layer perceptron (MLP) policy of two layers of size _,_ each with tanh activation function
     # policy_kwargs = dict(net_arch=[256,256]) # act_fun=tf.nn.tanh
@@ -207,7 +282,7 @@ def run_sb3(args):
             total_timesteps=args.total_timesteps, 
             log_interval=1,
             # callback=[checkpoint_callback, wandb_callback]
-            callback=[checkpoint_callback, WandbCallback()]
+            callback=[checkpoint_callback, WandbCallback(), custom_callback]
         )
         
         # Log successful completion
@@ -298,6 +373,7 @@ def parse_arguments():
     parser.add_argument("--randomize_velocity_command", action="store_true", help="Whether to randomize velocity commands")
 
     parser.add_argument("--terrain", type=str, default="NONE", choices=["STAIRS", "SLOPES", "GAPS", "RANDOM", "NONE"], help="Terrain, obstacles")
+    parser.add_argument("--terrain_difficulty", type=int, default=5, help="Levels of difficulty of obstacles")
 
     # PPO Hyperparams
     parser.add_argument("--batch_size", type=int, default=8192, help="Size of rollout / batch size")
