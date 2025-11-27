@@ -50,30 +50,30 @@ class CustomCallback(BaseCallback):
         # to have access to the parent object
         # self.parent = None  # type: Optional[BaseCallback]
 
-    # def _on_training_start(self) -> None:
-    #     """
-    #     This method is called before the first rollout starts.
-    #     """
-    #     pass
+    def _on_training_start(self) -> None:
+        """
+        This method is called before the first rollout starts.
+        """
+        pass
 
-    # def _on_rollout_start(self) -> None:
-    #     """
-    #     A rollout is the collection of environment interaction
-    #     using the current policy.
-    #     This event is triggered before collecting new samples.
-    #     """
-    #     pass
+    def _on_rollout_start(self) -> None:
+        """
+        A rollout is the collection of environment interaction
+        using the current policy.
+        This event is triggered before collecting new samples.
+        """
+        pass
 
-    # def _on_step(self) -> bool:
-    #     """
-    #     This method will be called by the model after each call to `env.step()`.
+    def _on_step(self) -> bool:
+        """
+        This method will be called by the model after each call to `env.step()`.
 
-    #     For child callback (of an `EventCallback`), this will be called
-    #     when the event is triggered.
+        For child callback (of an `EventCallback`), this will be called
+        when the event is triggered.
 
-    #     :return: If the callback returns False, training is aborted early.
-    #     """
-    #     return True
+        :return: If the callback returns False, training is aborted early.
+        """
+        return True
 
     def _on_rollout_end(self) -> None:
         """
@@ -88,11 +88,11 @@ class CustomCallback(BaseCallback):
             "des_vel_x_container": des_vel_x_container
         })
 
-    # def _on_training_end(self) -> None:
-    #     """
-    #     This event is triggered before exiting the `learn()` method.
-    #     """
-    #     pass
+    def _on_training_end(self) -> None:
+        """
+        This event is triggered before exiting the `learn()` method.
+        """
+        pass
 
 
 def run_sb3(args):
