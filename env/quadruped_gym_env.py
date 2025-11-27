@@ -837,7 +837,7 @@ class QuadrupedGymEnv(gym.Env):
         if self._is_render:
           print('ground friction coefficient is', ground_mu_k)
 
-      if self._terrain is not None:
+      if self._terrain is not None and self._terrain != "NONE":
         if self._terrain == "SLOPES":
           self.add_slopes(pitch=0.2)
         elif self._terrain == "STAIRS":
