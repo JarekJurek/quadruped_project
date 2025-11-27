@@ -31,11 +31,16 @@ def run_sb3(args):
     wandb_dir = os.path.join(args.save_path, "wandb_runs", f"{args.project_name}-worker-{worker_id}-{timestamp}")
     os.makedirs(wandb_dir, exist_ok=True)
     os.environ["WANDB_DIR"] = wandb_dir
+
+    if args.run_name is not None:
+        run_name = f"{args.run_name}-worker-{worker_id}-{timestamp}"
+    else:
+        run_name = f"{args.learning_alg}-worker-{worker_id}-{timestamp}"
     
     # Initialize wandb
     wandb.init(
         project=args.project_name,
-        name=f"{args.learning_alg}-worker-{worker_id}-{timestamp}",
+        name=run_name,
         dir=wandb_dir,
         sync_tensorboard=True,
         config={
@@ -173,6 +178,15 @@ def run_sb3(args):
             tb_str = traceback.format_exc()
             print(f"Failed to load pretrained model. Training from scratch. Error: {e}\n{tb_str}")
             wandb.log({"model_loading_failed": True, "error_message": str(e), "traceback": tb_str})
+            # Create new model if loading failed
+            if args.learning_alg == "PPO":
+                wandb.config.update({"ppo_config": ppo_config})
+                model = PPO('MlpPolicy', env, **ppo_config)
+            elif args.learning_alg == "SAC":
+                wandb.config.update({"sac_config": sac_config})
+                model = SAC('MlpPolicy', env, **sac_config)
+            else:
+                raise ValueError(args.learning_alg + ' not implemented')
     #Create new model
     else:
         if args.learning_alg == "PPO":
@@ -255,6 +269,7 @@ def calculate_action_repeat(args):
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Quadruped RL training with Stable Baselines 3")
     parser.add_argument("--project-name", type=str, default="quadruped_rl", help="Name of the project")
+    parser.add_argument("--run-name", type=str, default=None, help="Name of the run")
     
     parser.add_argument("--learning-alg", type=str, default="PPO", choices=["PPO", "SAC"], help="Learning algorithm to use (default: PPO)")
     parser.add_argument("--motor_control_mode", type=str, default="CPG", choices=["CPG", "PD","TORQUE", "CARTESIAN_PD"], help="Motor control mode")
