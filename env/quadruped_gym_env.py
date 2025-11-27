@@ -150,6 +150,9 @@ class QuadrupedGymEnv(gym.Env):
       randomize_velocity_command=False,
       des_vel_x_min=0.3,
       des_vel_x_max=0.8,
+      num_stairs=12, 
+      stair_height=0.05, 
+      stair_width=0.25,
       **kwargs): # any extra arguments from legacy
     """Initialize the quadruped gym environment.
     Args:
@@ -220,6 +223,10 @@ class QuadrupedGymEnv(gym.Env):
     self.des_vel_x_container = []
 
     self._sample_vel_interval = 4.0
+
+    self.num_stairs = num_stairs, 
+    self.stair_height = stair_height, 
+    self.stair_width = stair_width,
 
     # other bookkeeping 
     self._num_bullet_solver_iterations = int(300 / action_repeat) 
@@ -907,7 +914,7 @@ class QuadrupedGymEnv(gym.Env):
         if self._terrain == "SLOPES":
           self.add_slopes(pitch=0.2)
         elif self._terrain == "STAIRS":
-          self.add_stairs(num_stairs=12, stair_height=0.05, stair_width=0.25)
+          self.add_stairs(num_stairs=self.num_stairs, stair_height=self.stair_height, stair_width=self.stair_width)
         elif self._terrain == "GAPS":
           self.add_gaps(num_gaps=5, gap_width=0.1, between_gaps_width=2)
         elif self._terrain == "RANDOM":
