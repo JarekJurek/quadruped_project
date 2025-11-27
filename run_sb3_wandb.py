@@ -227,9 +227,9 @@ def run_sb3(args):
         "worker_completed": True,
         "total_training_steps": args.total_timesteps,
         "algorithm_used": args.learning_alg,
-        "cpg_h": env.cpg_h_container,
-        "cpg_g_c": env.cpg_g_c_container,
-        "des_vel_x": env.des_vel_x_container,
+        "cpg_h": env.get_attr("cpg_h_container"),
+        "cpg_g_c": env.get_attr("cpg_g_c_container"),
+        "des_vel_x": env.get_attr("des_vel_x_container"),
     })
 
     # Finish wandb run
