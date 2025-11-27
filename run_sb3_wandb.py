@@ -78,7 +78,10 @@ def run_sb3(args):
         gpu_arg = "cpu"
 
     # directory to save policies and normalization parameters
-    save_path = f'{args.save_path}/logs/intermediate_models/{args.project_name}/'+ timestamp + '/'
+    if args.run_name is not None:
+        save_path = f'{args.save_path}/logs/intermediate_models/{args.project_name}/{args.run_name}/'+ timestamp + '/'
+    else:
+        save_path = f'{args.save_path}/logs/intermediate_models/{args.project_name}/'+ timestamp + '/'
     os.makedirs(save_path, exist_ok=True)
     
     # Log save path to wandb
