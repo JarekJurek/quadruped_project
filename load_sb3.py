@@ -79,7 +79,7 @@ def load_sb3(args):
     env_config["motor_control_mode"]=args.motor_control_mode
     env_config["task_env"]=args.task_env
     env_config["observation_space_mode"]=args.observation_space_mode
-    env_config["des_x_vel"]=args.des_x_vel
+    env_config["des_vel_x"]=args.des_x_vel
     env_config["des_h"]=args.des_h
     env_config["des_g_c"]=args.des_g_c
     env_config["terrain"]=args.terrain
@@ -172,14 +172,14 @@ def parse_arguments():
 
     parser.add_argument("--des_x_vel", type=float, default=0.4, help="desired linear velocity x axis")
 
-    parser.add_argument("--des_h", type=float, default=0.25, help="desired h - z of the body")
+    parser.add_argument("--des_h", type=float, default=0.3, help="desired h - z of the body")
     parser.add_argument("--des_g_c", type=float, default=0.07, help="desired g_c - max z distance of a feet in swing phase")
 
     parser.add_argument("--terrain", type=str, default="NONE", choices=["STAIRS", "SLOPES", "GAPS", "RANDOM", "NONE"], help="Terrain, obstacles")
     
     parser.add_argument("--learning-alg", type=str, default="PPO", choices=["PPO", "SAC"], help="Learning algorithm to use (default: PPO)")
     parser.add_argument("--motor_control_mode", type=str, default="CPG", choices=["CPG", "PD","TORQUE", "CARTESIAN_PD"], help="Motor control mode")
-    parser.add_argument("--observation_space_mode", type=str, default="LR_COURSE_OBS", choices=["DEFAULT", "LR_COURSE_OBS", "LR_COURSE_OBS_EXTENDED"], help="Observation space mode")
+    parser.add_argument("--observation_space_mode", type=str, default="LR_COURSE_OBS_EXTENDED", choices=["DEFAULT", "LR_COURSE_OBS", "LR_COURSE_OBS_EXTENDED"], help="Observation space mode")
     parser.add_argument("--task_env", type=str, default="FWD_CUSTOM", choices=["LR_COURSE_TASK", "FLAGRUN","FWD_LOCOMOTION", "FWD_CUSTOM", "FWD_BASIC"], help="Task to be executed")
     parser.add_argument("--save-path", type=str, help="Path for storing intermediate models", default=".")
     parser.add_argument("--full_path", type=str, help="Full path to the model location", required=True)
