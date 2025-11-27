@@ -29,7 +29,7 @@ class CustomCallback(BaseCallback):
 
     :param verbose: Verbosity level: 0 for no output, 1 for info messages, 2 for debug messages
     """
-    def __init__(self, verbose: int = 0):
+    def __init__(self, verbose: int = 0, learning_rate_adaptive=False):
         super().__init__(verbose)
         # Those variables will be accessible in the callback
         # (they are defined in the base class)
@@ -49,6 +49,7 @@ class CustomCallback(BaseCallback):
         # Sometimes, for event callback, it is useful
         # to have access to the parent object
         # self.parent = None  # type: Optional[BaseCallback]
+        self.learning_rate_adaptive = learning_rate_adaptive
 
     def _on_training_start(self) -> None:
         """
@@ -58,21 +59,36 @@ class CustomCallback(BaseCallback):
 
     def _on_rollout_start(self) -> None:
         """
-        A rollout is the collection of environment interaction
-        using the current policy.
-        This event is triggered before collecting new samples.
+        This is triggered before a new rollout starts, which implies
+        the previous training phase just finished.
         """
-        pass
+        # 1. Access the logged KL divergence from the previous update
+        # We use 'train/approx_kl' which SB3 logs automatically
+        if "train/approx_kl" in self.logger.name_to_value and self.learning_rate_adaptive:
+            current_kl = self.logger.name_to_value["train/approx_kl"]
+            
+            # 2. Update Learning Rate based on Target KL logic
+            if current_kl > self.target_kl * 2.0:
+                self.current_lr = max(1e-5, self.current_lr / 1.5)
+                if self.verbose > 0:
+                    print(f"KL ({current_kl:.4f}) too high. Reducing LR to {self.current_lr:.6f}")
+            
+            elif current_kl < self.target_kl * 0.5:
+                self.current_lr = min(1e-2, self.current_lr * 1.5)
+                if self.verbose > 0:
+                    print(f"KL ({current_kl:.4f}) too low. Increasing LR to {self.current_lr:.6f}")
+
+            # 3. Apply the new learning rate to the optimizer
+            self._update_learning_rate(self.current_lr)
+            self.logger.record("train/learning_rate_adaptive", self.current_lr)
+
+    def _update_learning_rate(self, new_lr):
+        self.model.learning_rate = new_lr # Update SB3 internal tracker
+        for param_group in self.model.policy.optimizer.param_groups:
+            param_group["lr"] = new_lr   
 
     def _on_step(self) -> bool:
-        """
-        This method will be called by the model after each call to `env.step()`.
 
-        For child callback (of an `EventCallback`), this will be called
-        when the event is triggered.
-
-        :return: If the callback returns False, training is aborted early.
-        """
         return True
 
     def _on_rollout_end(self) -> None:
@@ -123,6 +139,7 @@ def run_sb3(args):
             "load_existing_model": args.load_nn,
             "total_timesteps": args.total_timesteps,
             "control_frequency": args.control_frequency,
+            "learning_rate_adaptive": args.learning_rate_adaptive,
         }
     )
 
@@ -168,7 +185,7 @@ def run_sb3(args):
     #     gradient_save_freq=100,
     #     # verbose=1,
     # )
-    custom_callback = CustomCallback(verbose=2)
+    custom_callback = CustomCallback(verbose=2, learning_rate_adaptive=args.learning_rate_adaptive)
 
     # create Vectorized gym environment
     env = lambda: QuadrupedGymEnv(**env_configs)  
@@ -204,7 +221,7 @@ def run_sb3(args):
         "tensorboard_log": args.save_path,
         "_init_setup_model": True,
         "policy_kwargs": policy_kwargs,
-        # "target_kl": args.des_kl_divergence,
+        "target_kl": args.des_kl_divergence,
         "device": gpu_arg,
         "use_sde": args.use_sde
     }
@@ -385,7 +402,8 @@ def parse_arguments():
     parser.add_argument("--clip_range", type=float, default=0.2, help="Clip range in PPO")
     parser.add_argument("--use_sde", type=bool, default=False, help="Whether to use generalized State Dependent Exploration (gSDE) instead of action noise exploration")
     parser.add_argument("--learning_rate", type=float, default=1e-4, help="Learning rate")
-    # parser.add_argument("--des_kl_divergence", type=float, default=None, help="Desired KL divergence in PPOin CPG-RL 0.01")    
+    parser.add_argument("--learning_rate_adaptive", action="store_true", help="Whether to ude adaptive learning rate")
+    parser.add_argument("--des_kl_divergence", type=float, default=0.01, help="Desired KL divergence in PPOin CPG-RL 0.01")    
 
     args = parser.parse_args()
     return args
