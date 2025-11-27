@@ -953,7 +953,8 @@ class QuadrupedGymEnv(gym.Env):
   
   def sample_vel_command(self):
     self._des_vel_x = np.random.uniform(self._des_vel_x_min, self._des_vel_x_max)
-    self.des_vel_x_container.append(self._des_vel_x)
+    if self._des_vel_x not in self.des_vel_x_container:
+      self.des_vel_x_container.append(self._des_vel_x)
   
   def _randomize_cpg_parameters(self):
     """Randomize CPG height and ground clearance parameters for domain randomization."""
@@ -962,8 +963,10 @@ class QuadrupedGymEnv(gym.Env):
     random_height = np.random.uniform(self._h_min, self._h_max)
     random_ground_clearance = np.random.uniform(self._g_c_min, self._g_c_max)
 
-    self.cpg_h_container.append(random_height)
-    self.cpg_g_c_container.append(random_ground_clearance)
+    if random_height not in self.cpg_h_container:
+      self.cpg_h_container.append(random_height)
+    if random_ground_clearance not in self.cpg_g_c_container:
+      self.cpg_g_c_container.append(random_ground_clearance)
     
     # Update CPG parameters
     self._cpg._robot_height = random_height
