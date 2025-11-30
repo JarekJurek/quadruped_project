@@ -27,4 +27,8 @@ source /zhome/d4/a/214319/miniconda3/bin/activate
 
 conda activate quadruped
 
-python run_sb3_wandb.py --project-name quadruped_rl --run-name adaptive_lr_adapt_vel_finetune --save-path /work3/s243600 --learning-alg PPO --num-envs 40 --task_env FWD_CUSTOM --observation_space_mode LR_COURSE_OBS_EXTENDED --total_timesteps 3000000 --learning_rate 3e-4 --max_episode_length 20 --randomize_velocity_command --learning_rate_adaptive --load-nn --load_model_path /work3/s243600/logs/intermediate_models/quadruped_rl/new_obs_vel/112725175937
+# python run_sb3_wandb.py --project-name quadruped_rl --run-name obstacles_curr_finetune --save-path /work3/s243600 --learning-alg PPO --num-envs 40 --task_env FWD_CUSTOM --observation_space_mode LR_COURSE_OBS_EXTENDED --total_timesteps 5000000 --learning_rate 3e-4 --max_episode_length 20 --learning_rate_adaptive --load-nn --num_stairs 5 --terrain_difficulty 3 --terrain STAIRS --load_model_path /work3/s243600/logs/intermediate_models/quadruped_rl/obstacles_curr_scratch/112825001845
+
+python run_sb3_wandb.py --project-name quadruped_rl --run-name adaptive_lr_adapt_vel_finetune_2 --save-path /work3/s243600 --learning-alg PPO --num-envs 40 --task_env FWD_CUSTOM --observation_space_mode LR_COURSE_OBS_EXTENDED --total_timesteps 5000000 --learning_rate 3e-4 --max_episode_length 20 --randomize_velocity_command --learning_rate_adaptive --load-nn --load_model_path /work3/s243600/logs/intermediate_models/quadruped_rl/adaptive_lr_adapt_vel_finetune/112825001511
+
+# python run_sb3_wandb.py --project-name quadruped_rl --run-name obstacles_curr_scratch --save-path /work3/s243600 --learning-alg PPO --num-envs 40 --task_env FWD_CUSTOM --observation_space_mode LR_COURSE_OBS_EXTENDED --total_timesteps 3000000 --learning_rate 3e-4 --max_episode_length 20 --learning_rate_adaptive --num_stairs 5 --terrain_difficulty 3 --terrain STAIRS

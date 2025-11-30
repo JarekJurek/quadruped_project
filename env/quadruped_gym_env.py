@@ -151,7 +151,7 @@ class QuadrupedGymEnv(gym.Env):
       des_vel_x_min=0.3,
       des_vel_x_max=0.8,
       num_stairs=12, 
-      stair_height=0.05, 
+      stair_height=0.05,
       stair_width=0.25,
       **kwargs): # any extra arguments from legacy
     """Initialize the quadruped gym environment.
@@ -224,9 +224,9 @@ class QuadrupedGymEnv(gym.Env):
 
     self._sample_vel_interval = 4.0
 
-    self.num_stairs = num_stairs, 
-    self.stair_height = stair_height, 
-    self.stair_width = stair_width,
+    self.num_stairs = num_stairs
+    self.stair_height = stair_height
+    self.stair_width = stair_width
 
     # other bookkeeping 
     self._num_bullet_solver_iterations = int(300 / action_repeat) 
