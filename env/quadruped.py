@@ -77,6 +77,10 @@ class Quadruped(object):
     self._applied_motor_torques = np.zeros(self.num_motors)
     self._accurate_motor_model_enabled = accurate_motor_model_enabled
 
+    self._last_motor_velocities = np.zeros(self.num_motors)
+    self._last_motor_accelerations = np.zeros(self.num_motors)
+    self._last_update_time = None
+
     # motor control mode for accurate motor model, should only be torque or position at this low level
     if motor_control_mode == "PD":
       self._motor_control_mode = "PD"
@@ -221,6 +225,20 @@ class Quadruped(object):
     ]
     motor_velocities = np.multiply(motor_velocities, self._motor_direction)
     return motor_velocities
+  
+  def UpdateMotorAccelerations(self, current_time):
+    """Call this once per simulation step to update motor accelerations."""
+    velocities = self.GetMotorVelocities()
+    if self._last_update_time is not None:
+        dt = current_time - self._last_update_time
+        if dt > 0:
+            self._last_motor_accelerations = (velocities - self._last_motor_velocities) / dt
+    self._last_motor_velocities = velocities
+    self._last_update_time = current_time
+
+  def GetMotorAccelerations(self):
+    """Return the last computed motor accelerations."""
+    return self._last_motor_accelerations
 
   def GetMotorTorques(self):
     """Get the torques the motors are exerting.

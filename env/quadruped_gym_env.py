@@ -810,6 +810,9 @@ class QuadrupedGymEnv(gym.Env):
     # save motor torques and velocities to compute power in reward function
     self._dt_motor_torques = []
     self._dt_motor_velocities = []
+    self._dt_motor_accelerations = []
+
+    self.robot.UpdateMotorAccelerations(current_time=self.get_sim_time())
     
     if "FLAGRUN" in self._TASK_ENV:
       self._prev_pos_to_goal, _ = self.get_distance_and_angle_to_goal()
@@ -825,6 +828,7 @@ class QuadrupedGymEnv(gym.Env):
       self._sim_step_counter += 1
       self._dt_motor_torques.append(self.robot.GetMotorTorques())
       self._dt_motor_velocities.append(self.robot.GetMotorVelocities())
+      self._dt_motor_accelerations.append(self.robot.GetMotorAccelerations())
 
       if self._is_render:
         self._render_step_helper()
