@@ -198,7 +198,9 @@ def run_sb3(args):
                    "randomize_velocity_command": args.randomize_velocity_command,
                    "num_stairs": args.num_stairs,
                    "stair_height": args.stair_height,
-                   "stair_width": args.stair_width,}
+                   "stair_width": args.stair_width,
+                   "des_h": args.des_h,
+                   "des_g_c": args.des_g_c}
     
     # Log environment configuration to wandb
     wandb.config.update({"env_configs": env_configs})
@@ -419,7 +421,7 @@ def parse_arguments():
     parser.add_argument("--learning-alg", type=str, default="PPO", choices=["PPO", "SAC"], help="Learning algorithm to use (default: PPO)")
     parser.add_argument("--motor_control_mode", type=str, default="CPG", choices=["CPG", "PD","TORQUE", "CARTESIAN_PD"], help="Motor control mode")
     parser.add_argument("--observation_space_mode", type=str, default="LR_COURSE_OBS_EXTENDED", choices=["DEFAULT", "LR_COURSE_OBS", "LR_COURSE_OBS_EXTENDED"], help="Observation space mode")
-    parser.add_argument("--task_env", type=str, default="LR_COURSE_TASK", choices=["LR_COURSE_TASK", "FLAGRUN","FWD_LOCOMOTION", "FWD_CUSTOM", "FWD_BASIC"], help="Task to be executed")
+    parser.add_argument("--task_env", type=str, default="LR_COURSE_TASK", choices=["LR_COURSE_TASK", "FLAGRUN","FWD_LOCOMOTION", "FWD_CUSTOM", "FWD_BASIC", "ETH", "CPG_RL"], help="Task to be executed")
     parser.add_argument("--num-envs", type=int, default=1, help="Number of pybullet environments to create for data collection (default: 1)")
     parser.add_argument("--use-gpu", action="store_true", help="Use GPU for training (make sure to install all necessary drivers)")
     parser.add_argument("--save-path", type=str, help="Path for storing intermediate models", default=".")
@@ -430,6 +432,9 @@ def parse_arguments():
     parser.add_argument("--des_x_vel", type=float, default=0.4, help="desired linear velocity x axis")
     parser.add_argument("--des_vel_x_min", type=float, default=0.3, help="desired linear velocity x axis")
     parser.add_argument("--des_vel_x_max", type=float, default=0.8, help="desired linear velocity x axis")
+
+    parser.add_argument("--des_h", type=float, default=0.3, help="desired body height")
+    parser.add_argument("--des_g_c", type=float, default=0.15, help="desired max feet height")
 
     parser.add_argument("--total_timesteps", type=int, default=1000000, help="Total timesteps")
     parser.add_argument("--time_step", type=float, default=0.001, help="time step, for CPG_RL 0.01 s")
