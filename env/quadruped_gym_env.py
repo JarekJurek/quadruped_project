@@ -662,6 +662,91 @@ class QuadrupedGymEnv(gym.Env):
       + 0.001 * self._time_step * work_penalty \
 
     return max(reward,0) # keep rewards positive
+  
+  def _reward_eth(self, des_vel_x=0.8, des_vel_y=0., des_yaw_rate=0.):
+
+    def calculate_reward(des_value, measured_value):
+      return np.exp(-1 / 0.25 * (np.linalg.norm(des_value - measured_value))**2)
+    
+
+    x_vel_reward = calculate_reward(des_vel_x, self.robot.GetBaseLinearVelocity()[0])
+
+    y_vel_reward = calculate_reward(des_vel_y, self.robot.GetBaseLinearVelocity()[1])
+
+    angular_velocity_tracking = calculate_reward(des_yaw_rate, self.robot.GetTrueBaseRollPitchYawRate()[2])
+
+    linear_vel_penalty = - self.robot.GetBaseLinearVelocity()[2] ** 2
+
+    base_angular_velocity = self.robot.GetTrueBaseRollPitchYawRate()
+    omega_xy = base_angular_velocity[:2]  # Extract roll rate and pitch rate (x and y components)
+    angular_velocity_penalty = -np.linalg.norm(omega_xy)**2
+    
+    # work_penalty = 0
+    # if hasattr(self, '_prev_motor_velocities'):
+    #     dq_diff = np.array(self._dt_motor_velocities[-1]) #- np.array(self._prev_motor_velocities)
+    #     ddq_diff = np.array(self._dt_motor_velocities[-1]) - np.array(self._prev_motor_velocities)
+    #     work_penalty = np.abs(np.dot(self._dt_motor_torques[-1], dq_diff))
+    # self._prev_motor_velocities = self._dt_motor_velocities[-1].copy() if self._dt_motor_velocities else np.zeros(12)
+
+    joint_motion = 0
+    dq = np.array(self._dt_motor_velocities[-1])
+    ddq = np.array(self._dt_motor_torques[-1])
+
+
+    joint_torques = 0
+    torques = np.array(self._dt_motor_torques[-1])
+
+    action_rate = 0
+
+    #without collisions and feet air time, because those are for cartesian/joint PD not CPG
+
+    reward = 1.0 * self._time_step * x_vel_reward \
+      + 1.0 * self._time_step * y_vel_reward \
+      + 0.5 * self._time_step * angular_velocity_tracking \
+      + 4.0 * self._time_step * linear_vel_penalty \
+      + 0.05 * self._time_step * angular_velocity_penalty \
+      + 0.001 * self._time_step * joint_motion \
+      + 0.00002 * self._time_step * joint_torques \
+      + 0.25 * self._time_step * action_rate \
+
+    return reward
+
+  def _reward_cpg_rl(self, des_vel_x=None, des_vel_y=0., des_yaw_rate=0.):
+
+    def calculate_reward(des_value, measured_value):
+      return np.exp(-1 / 0.25 * (np.linalg.norm(des_value - measured_value))**2)
+    
+
+    x_vel_reward = calculate_reward(des_vel_x, self.robot.GetBaseLinearVelocity()[0])
+
+    y_vel_reward = calculate_reward(des_vel_y, self.robot.GetBaseLinearVelocity()[1])
+
+    angular_velocity_tracking = calculate_reward(des_yaw_rate, self.robot.GetTrueBaseRollPitchYawRate()[2])
+
+    z_vel_penalty = - self.robot.GetBaseLinearVelocity()[2] ** 2
+
+    base_angular_velocity = self.robot.GetTrueBaseRollPitchYawRate()
+    omega_xy = base_angular_velocity[:2]  # Extract roll rate and pitch rate (x and y components)
+    angular_velocity_penalty = -np.linalg.norm(omega_xy)**2
+    
+    work_penalty = 0
+    if hasattr(self, '_prev_motor_velocities'):
+        dq_diff = np.array(self._dt_motor_velocities[-1]) - np.array(self._prev_motor_velocities)
+        work_penalty = np.abs(np.dot(self._dt_motor_torques[-1], dq_diff))
+    self._prev_motor_velocities = self._dt_motor_velocities[-1].copy() if self._dt_motor_velocities else np.zeros(12)
+
+    # reward = 0.75 * self._time_step * x_vel_reward \
+    #         + 0.75 * self._time_step * y_vel_reward \
+    #         + 0.5 * self._time_step * angular_velocity_tracking \
+    #         + 2. * self._time_step * z_vel_penalty \
+    #         + 0.05 * self._time_step * angular_velocity_penalty \
+    #         + 0.001 * self._time_step * work_penalty \
+    reward = 0.75 * self._time_step * x_vel_reward \
+      + 0.75 * self._time_step * y_vel_reward \
+      + 2. * self._time_step * z_vel_penalty \
+      + 0.001 * self._time_step * work_penalty \
+
+    return max(reward,0) # keep rewards positive
 
   def _reward(self):
     """ Get reward depending on task"""
@@ -673,6 +758,10 @@ class QuadrupedGymEnv(gym.Env):
       return self._reward_fwd_locomotion_basic()
     elif self._TASK_ENV == "LR_COURSE_TASK":
       return self._reward_lr_course(des_vel_x=self._des_vel_x)
+    elif self._TASK_ENV == "ETH":
+      return self._reward_eth(des_vel_x=self._des_vel_x)
+    elif self._TASK_ENV == "CPG_RL":
+      return self._reward_cpg_rl(des_vel_x=self._des_vel_x)
     elif self._TASK_ENV == "FLAGRUN":
       return self._reward_flag_run()
     else:
