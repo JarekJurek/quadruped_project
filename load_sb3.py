@@ -169,7 +169,7 @@ def parse_arguments():
     parser.add_argument("--project-name", type=str, default="quadruped_rl", help="Name of the project")
 
     parser.add_argument("--record_video", type=bool, default=False, help="Record video flag")
-    parser.add_argument("--add_noise", type=bool, default=False, help="Add noise flag")
+    parser.add_argument("--add_noise", action="store_true", help="Add noise flag")
 
     parser.add_argument("--sim_time", type=int, default=500, help="Duration of the simulation in miliseconds (has to be integer)")
 
