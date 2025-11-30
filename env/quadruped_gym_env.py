@@ -664,51 +664,56 @@ class QuadrupedGymEnv(gym.Env):
     return max(reward,0) # keep rewards positive
   
   def _reward_eth(self, des_vel_x=0.8, des_vel_y=0., des_yaw_rate=0.):
+    # 1. Linear Velocity Tracking (Corrected to Vector Norm)
+    # Source [548]: phi(v*_xy - v_xy)
+    vel_sq_error = (des_vel_x - self.robot.GetBaseLinearVelocity()[0])**2 + \
+                   (des_vel_y - self.robot.GetBaseLinearVelocity()[1])**2
+    lin_vel_reward = np.exp(-vel_sq_error / 0.25)
 
-    def calculate_reward(des_value, measured_value):
-      return np.exp(-1 / 0.25 * (np.linalg.norm(des_value - measured_value))**2)
-    
+    # 2. Angular Velocity Tracking
+    # Source [548]: phi(omega*_z - omega_z)
+    ang_vel_error = (des_yaw_rate - self.robot.GetTrueBaseRollPitchYawRate()[2])**2
+    ang_vel_reward = np.exp(-ang_vel_error / 0.25)
 
-    x_vel_reward = calculate_reward(des_vel_x, self.robot.GetBaseLinearVelocity()[0])
+    # 3. Linear Velocity Penalty (z-axis)
+    # Source [548]: -v_{b,z}^2
+    linear_vel_penalty = -self.robot.GetBaseLinearVelocity()[2]**2
 
-    y_vel_reward = calculate_reward(des_vel_y, self.robot.GetBaseLinearVelocity()[1])
-
-    angular_velocity_tracking = calculate_reward(des_yaw_rate, self.robot.GetTrueBaseRollPitchYawRate()[2])
-
-    linear_vel_penalty = - self.robot.GetBaseLinearVelocity()[2] ** 2
-
+    # 4. Angular Velocity Penalty (xy-axes)
+    # Source [548]: -||omega_xy||^2
     base_angular_velocity = self.robot.GetTrueBaseRollPitchYawRate()
-    omega_xy = base_angular_velocity[:2]  # Extract roll rate and pitch rate (x and y components)
-    angular_velocity_penalty = -np.linalg.norm(omega_xy)**2
-    
-    # work_penalty = 0
-    # if hasattr(self, '_prev_motor_velocities'):
-    #     dq_diff = np.array(self._dt_motor_velocities[-1]) #- np.array(self._prev_motor_velocities)
-    #     ddq_diff = np.array(self._dt_motor_velocities[-1]) - np.array(self._prev_motor_velocities)
-    #     work_penalty = np.abs(np.dot(self._dt_motor_torques[-1], dq_diff))
-    # self._prev_motor_velocities = self._dt_motor_velocities[-1].copy() if self._dt_motor_velocities else np.zeros(12)
+    angular_velocity_penalty = -np.linalg.norm(base_angular_velocity[:2])**2
 
-    joint_motion = 0
+    # 5. Joint Motion (Minimize Accel and Vel)
+    # Source [548]: -||q_dot||^2 - ||q_ddot||^2 (inferred from table grouping)
     dq = np.array(self._dt_motor_velocities[-1])
-    ddq = np.array(self._dt_motor_torques[-1])
+    ddq = np.array(self._dt_motor_accelerations[-1])
+    joint_motion = -np.linalg.norm(ddq)**2 - np.linalg.norm(dq)**2
 
-
-    joint_torques = 0
+    # 6. Joint Torques
+    # Source [548]: -||tau||^2
     torques = np.array(self._dt_motor_torques[-1])
+    joint_torques = -np.linalg.norm(torques)**2
 
-    action_rate = 0
+    # 7. Action Rate (Smoothness)
+    # Source [548]: -||a_t - a_{t-1}||^2
+    # Ensure you implemented the _prev_action_for_reward logic in step()
+    if hasattr(self, '_prev_action_for_reward'):
+        action_diff = self._last_action - self._prev_action_for_reward
+        action_rate = -np.linalg.norm(action_diff)**2
+    else:
+        action_rate = 0.0
 
-    #without collisions and feet air time, because those are for cartesian/joint PD not CPG
-
-    reward = 1.0 * self._time_step * x_vel_reward \
-      + 1.0 * self._time_step * y_vel_reward \
-      + 0.5 * self._time_step * angular_velocity_tracking \
-      + 4.0 * self._time_step * linear_vel_penalty \
-      + 0.05 * self._time_step * angular_velocity_penalty \
-      + 0.001 * self._time_step * joint_motion \
-      + 0.00002 * self._time_step * joint_torques \
-      + 0.25 * self._time_step * action_rate \
-
+    # Weights from Table 2 
+    # Note: lin_vel_reward combines x and y, so we apply the 1.0dt weight once to the vector term.
+    reward = 1.0 * self._time_step * lin_vel_reward \
+           + 0.5 * self._time_step * ang_vel_reward \
+           + 4.0 * self._time_step * linear_vel_penalty \
+           + 0.05 * self._time_step * angular_velocity_penalty \
+           + 0.001 * self._time_step * joint_motion \
+           + 0.00002 * self._time_step * joint_torques \
+           + 0.25 * self._time_step * action_rate 
+           
     return reward
 
   def _reward_cpg_rl(self, des_vel_x=None, des_vel_y=0., des_yaw_rate=0.):
@@ -896,6 +901,8 @@ class QuadrupedGymEnv(gym.Env):
   def step(self, action):
     """ Step forward the simulation, given the action. """
     curr_act = action.copy()
+    if not hasattr(self, '_prev_action_for_reward'):
+        self._prev_action_for_reward = np.zeros_like(curr_act)
     # save motor torques and velocities to compute power in reward function
     self._dt_motor_torques = []
     self._dt_motor_velocities = []
