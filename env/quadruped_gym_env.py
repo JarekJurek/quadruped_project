@@ -153,6 +153,10 @@ class QuadrupedGymEnv(gym.Env):
       num_stairs=1, 
       stair_height=0.05,
       stair_width=0.25,
+      vel_tracking_weight=1.0, 
+      drift_weight=0.5, 
+      yaw_weight=0.5,
+      orientation_weight=1.0,
       **kwargs): # any extra arguments from legacy
     """Initialize the quadruped gym environment.
     Args:
@@ -221,6 +225,11 @@ class QuadrupedGymEnv(gym.Env):
     self._des_vel_x_min = des_vel_x_min
     self._des_vel_x_max = des_vel_x_max
     self.des_vel_x_container = []
+
+    self._vel_tracking_weight = vel_tracking_weight
+    self._drift_weight = drift_weight
+    self._yaw_weight = yaw_weight
+    self._orientation_weight = orientation_weight
 
     self._sample_vel_interval = 4.0
 
@@ -516,29 +525,34 @@ class QuadrupedGymEnv(gym.Env):
 
     return max(reward,0) # keep rewards positive
   
-  def _reward_fwd_locomotion_custom(self, des_vel_x=None):
+  def _reward_fwd_locomotion_custom(self, 
+                                    des_vel_x=None, 
+                                    vel_tracking_weight=1.0, 
+                                    drift_weight=0.5, 
+                                    yaw_weight=0.5,
+                                    orientation_weight=1.0):
     """Learn forward locomotion at a desired velocity."""
     
     # Velocity tracking reward
     actual_vel_x = self.robot.GetBaseLinearVelocity()[0]
     if des_vel_x is not None:
         # Exponential reward for velocity tracking
-        vel_tracking_reward = 1.0 * np.exp(-((actual_vel_x - des_vel_x)**2) / 0.25)
+        vel_tracking_reward = vel_tracking_weight * np.exp(-((actual_vel_x - des_vel_x)**2) / 0.25)
     else:
         # Reward forward velocity with saturation
-        vel_tracking_reward = 1.0 * np.clip(actual_vel_x, 0.0, 1.0)
+        vel_tracking_reward = vel_tracking_weight * np.clip(actual_vel_x, 0.0, 1.0)
     
     # Penalize lateral drift
     lateral_vel = self.robot.GetBaseLinearVelocity()[1]
-    drift_reward = -0.5 * lateral_vel**2
+    drift_reward = -drift_weight * lateral_vel**2
     
     # Penalize yaw deviation (go straight)
     yaw = self.robot.GetBaseOrientationRollPitchYaw()[2]
-    yaw_reward = -0.5 * yaw**2
+    yaw_reward = -yaw_weight * yaw**2
     
     # Penalize roll and pitch to maintain upright posture
     roll, pitch, _ = self.robot.GetBaseOrientationRollPitchYaw()
-    orientation_reward = -1.0 * (roll**2 + pitch**2)
+    orientation_reward = -orientation_weight * (roll**2 + pitch**2)
     
     # Energy penalty (instantaneous power, not accumulated)
     if self._dt_motor_torques and self._dt_motor_velocities:
@@ -758,7 +772,11 @@ class QuadrupedGymEnv(gym.Env):
     if self._TASK_ENV == "FWD_LOCOMOTION":
       return self._reward_fwd_locomotion(des_vel_x=self._des_vel_x)
     elif self._TASK_ENV == "FWD_CUSTOM":
-      return self._reward_fwd_locomotion_custom(des_vel_x=self._des_vel_x)
+      return self._reward_fwd_locomotion_custom(des_vel_x=self._des_vel_x,
+                                                vel_tracking_weight=self._vel_tracking_weight,
+                                                drift_weight=self._drift_weight,
+                                                yaw_weight=self._yaw_weight,
+                                                orientation_weight=self._orientation_weight)
     elif self._TASK_ENV == "FWD_BASIC":
       return self._reward_fwd_locomotion_basic()
     elif self._TASK_ENV == "LR_COURSE_TASK":

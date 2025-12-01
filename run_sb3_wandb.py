@@ -217,23 +217,29 @@ def run_sb3(args):
 
     action_repeat = calculate_action_repeat(args)
     
-    env_configs = {"motor_control_mode":args.motor_control_mode,
-                   "task_env": args.task_env,
-                   "observation_space_mode": args.observation_space_mode,
-                   "time_step": args.time_step,
-                   "max_episode_length": args.max_episode_length,
-                   "randomize_cpg_params": args.randomize_cpg_params,
-                   "action_repeat": action_repeat,
-                   "des_vel_x": args.des_x_vel,
-                   "des_vel_x_min": args.des_vel_x_min,
-                   "des_vel_x_max": args.des_vel_x_max,
-                   "terrain": args.terrain,
-                   "randomize_velocity_command": args.randomize_velocity_command,
-                   "num_stairs": args.num_stairs,
-                   "stair_height": args.stair_height,
-                   "stair_width": args.stair_width,
-                   "des_h": args.des_h,
-                   "des_g_c": args.des_g_c}
+    env_configs = {
+        "motor_control_mode": args.motor_control_mode,
+        "task_env": args.task_env,
+        "observation_space_mode": args.observation_space_mode,
+        "time_step": args.time_step,
+        "max_episode_length": args.max_episode_length,
+        "randomize_cpg_params": args.randomize_cpg_params,
+        "action_repeat": action_repeat,
+        "des_vel_x": args.des_x_vel,
+        "des_vel_x_min": args.des_vel_x_min,
+        "des_vel_x_max": args.des_vel_x_max,
+        "terrain": args.terrain,
+        "randomize_velocity_command": args.randomize_velocity_command,
+        "num_stairs": args.num_stairs,
+        "stair_height": args.stair_height,
+        "stair_width": args.stair_width,
+        "des_h": args.des_h,
+        "des_g_c": args.des_g_c,
+        "vel_tracking_weight": args.vel_tracking_weight,
+        "drift_weight": args.drift_weight,
+        "yaw_weight": args.yaw_weight,
+        "orientation_weight": args.orientation_weight,
+    }
     
     # Log environment configuration to wandb
     wandb.config.update({"env_configs": env_configs})
@@ -467,6 +473,11 @@ def parse_arguments():
     parser.add_argument("--des_x_vel", type=float, default=0.4, help="desired linear velocity x axis")
     parser.add_argument("--des_vel_x_min", type=float, default=0.3, help="desired linear velocity x axis")
     parser.add_argument("--des_vel_x_max", type=float, default=0.8, help="desired linear velocity x axis")
+
+    parser.add_argument("--vel_tracking_weight", type=float, default=1.0, help="Weight for velocity tracking in the reward function")
+    parser.add_argument("--drift_weight", type=float, default=0.5, help="Weight for drift penalty in the reward function")
+    parser.add_argument("--yaw_weight", type=float, default=0.5, help="Weight for yaw penalty in the reward function")
+    parser.add_argument("--orientation_weight", type=float, default=1.0, help="Weight for orientation penalty in the reward function")
 
     parser.add_argument("--des_h", type=float, default=0.3, help="desired body height")
     parser.add_argument("--des_g_c", type=float, default=0.15, help="desired max feet height")
