@@ -480,7 +480,7 @@ def parse_arguments():
     parser.add_argument("--randomize_velocity_command", action="store_true", help="Whether to randomize velocity commands")
 
     parser.add_argument("--terrain", type=str, default="NONE", choices=["STAIRS", "SLOPES", "GAPS", "RANDOM", "NONE"], help="Terrain, obstacles")
-    parser.add_argument("--terrain_difficulty", type=int, default=5, help="Levels of difficulty of obstacles")
+    parser.add_argument("--terrain_difficulty", type=int, default=1, help="Levels of difficulty of obstacles")
     parser.add_argument("--difficulty_objective", type=str, default="number", choices=["number", "height"], help="Terrain, obstacles")
     parser.add_argument("--num_stairs", type=int, default=12, help="desired h - z of the body")
     parser.add_argument("--stair_height", type=float, default=0.05, help="desired h - z of the body")
