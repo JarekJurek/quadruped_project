@@ -150,7 +150,7 @@ class QuadrupedGymEnv(gym.Env):
       randomize_velocity_command=False,
       des_vel_x_min=0.3,
       des_vel_x_max=0.8,
-      num_stairs=12, 
+      num_stairs=1, 
       stair_height=0.05,
       stair_width=0.25,
       **kwargs): # any extra arguments from legacy
