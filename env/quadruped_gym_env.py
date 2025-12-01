@@ -157,6 +157,8 @@ class QuadrupedGymEnv(gym.Env):
       drift_weight=0.5, 
       yaw_weight=0.5,
       orientation_weight=1.0,
+      enable_vmc=False,
+      k_vmc=250,
       **kwargs): # any extra arguments from legacy
     """Initialize the quadruped gym environment.
     Args:
@@ -230,6 +232,9 @@ class QuadrupedGymEnv(gym.Env):
     self._drift_weight = drift_weight
     self._yaw_weight = yaw_weight
     self._orientation_weight = orientation_weight
+
+    self.enable_vmc = enable_vmc
+    self.k_vmc = k_vmc
 
     self._sample_vel_interval = 4.0
 
@@ -912,9 +917,41 @@ class QuadrupedGymEnv(gym.Env):
       # foot_lin_vel_leg_frame = J @ dq[3*i:3*i+3]
       # tau += J.T @ (robot_config.kpCartesian @ (des_xyz_leg_pos - pos_leg_frame) + robot_config.kdCartesian @ (-foot_lin_vel_leg_frame))
       
+      if self.enable_vmc:
+        J, _ = self.robot.ComputeJacobianAndPosition(i)
+        orientation_matrix = self.robot.GetBaseOrientationMatrix()
+        P = orientation_matrix @ np.array([[1.0, 1.0, -1.0, -1.0], [-1.0, 1.0, -1.0, 1.0], [0.0, 0.0, 0.0, 0.0]])
+
+        # TODO: compute virtual model torques for leg_id
+        F_vmc = np.zeros((2, 4))
+        F_vmc = np.append(F_vmc, self.k_vmc * (np.array([[0, 0, 1]]) @ P), axis=0)
+        tau_i = np.zeros(3)
+        tau_i += J.T @ F_vmc[:, i]
+
+        tau += tau_i
+
       action[3*i:3*i+3] = tau
 
     return action
+
+  # def virtual_model(self) -> np.ndarray:
+  #   # All motor torques are in a single array
+  #   tau = np.zeros(3 * 4)
+  #   for leg_id in range(4):
+  #       J, ee_pos_legFrame = self.simulator.get_jacobian_and_position(leg_id)
+  #       orientation_matrix = self.simulator.get_base_orientation_matrix()
+  #       P = orientation_matrix @ np.array([[1.0, 1.0, -1.0, -1.0], [-1.0, 1.0, -1.0, 1.0], [0.0, 0.0, 0.0, 0.0]])
+
+  #       # TODO: compute virtual model torques for leg_id
+  #       F_vmc = np.zeros((2, 4))
+  #       F_vmc = np.append(F_vmc, self.k_vmc * (np.array([[0, 0, 1]]) @ P), axis=0)
+  #       tau_i = np.zeros(3)
+  #       tau_i += J.T @ F_vmc[:, leg_id]
+
+  #       # Store in torques array
+  #       tau[leg_id * 3 : leg_id * 3 + 3] = tau_i
+
+  #   return tau
 
   def step(self, action):
     """ Step forward the simulation, given the action. """

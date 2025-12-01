@@ -86,6 +86,8 @@ def load_sb3(args):
     env_config["num_stairs"]=args.num_stairs
     env_config["stair_height"]=args.stair_height
     env_config["stair_width"]=args.stair_width
+    env_config["enable_vmc"] = args.enable_vmc
+    env_config["k_vmc"] = args.k_vmc
 
     # get latest model and normalization stats, and plot 
     stats_path = os.path.join(log_dir, "vec_normalize.pkl")
@@ -119,7 +121,7 @@ def load_sb3(args):
     t = np.arange(args.sim_time) * 0.001
 
     for i in range(args.sim_time):
-        print(f"sim time: {i}")
+        # print(f"sim time: {i}")
         action, _states = model.predict(obs,deterministic=False) # sample at test time? ([TODO]: test if the outputs make sense)
         obs, rewards, dones, info = env.step(action)
         episode_reward += rewards
@@ -177,6 +179,9 @@ def parse_arguments():
 
     parser.add_argument("--des_h", type=float, default=0.3, help="desired h - z of the body")
     parser.add_argument("--des_g_c", type=float, default=0.07, help="desired g_c - max z distance of a feet in swing phase")
+
+    parser.add_argument("--enable_vmc", action="store_true", help="Enable Virtual Model Control (VMC)")
+    parser.add_argument("--k_vmc", type=float, default=250.0, help="VMC gain parameter")
 
     parser.add_argument("--terrain", type=str, default="NONE", choices=["STAIRS", "SLOPES", "GAPS", "RANDOM", "NONE"], help="Terrain, obstacles")
     parser.add_argument("--num_stairs", type=int, default=12, help="desired h - z of the body")
