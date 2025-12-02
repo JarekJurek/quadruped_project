@@ -88,6 +88,7 @@ def load_sb3(args):
     env_config["stair_width"]=args.stair_width
     env_config["enable_vmc"] = args.enable_vmc
     env_config["k_vmc"] = args.k_vmc
+    env_config["orientation_weight"] = args.orientation_weight
 
     # get latest model and normalization stats, and plot 
     stats_path = os.path.join(log_dir, "vec_normalize.pkl")
@@ -182,6 +183,9 @@ def parse_arguments():
 
     parser.add_argument("--enable_vmc", action="store_true", help="Enable Virtual Model Control (VMC)")
     parser.add_argument("--k_vmc", type=float, default=250.0, help="VMC gain parameter")
+
+    parser.add_argument("--orientation_weight", type=float, default=1.0, help="Weight for orientation penalty in the reward function")
+
 
     parser.add_argument("--terrain", type=str, default="NONE", choices=["STAIRS", "SLOPES", "GAPS", "RANDOM", "NONE"], help="Terrain, obstacles")
     parser.add_argument("--num_stairs", type=int, default=12, help="desired h - z of the body")
