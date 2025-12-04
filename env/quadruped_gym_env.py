@@ -741,42 +741,84 @@ class QuadrupedGymEnv(gym.Env):
            
     return reward
 
-  def _reward_cpg_rl(self, des_vel_x=None, des_vel_y=0., des_yaw_rate=0.):
-
-    def calculate_reward(des_value, measured_value):
-      return np.exp(-1 / 0.25 * (np.linalg.norm(des_value - measured_value))**2)
+  def _reward_cpg_rl(self, 
+                   des_vel_x=None,
+                   des_vel_y=0.0,
+                   des_yaw_rate=0.0):
+    """
+    Reward function strictly following CPG-RL Paper (Bellegarda et al.).
+    Reference: Section III-C, Page 4.
+    """
     
-
-    x_vel_reward = calculate_reward(des_vel_x, self.robot.GetBaseLinearVelocity()[0])
-
-    y_vel_reward = calculate_reward(des_vel_y, self.robot.GetBaseLinearVelocity()[1])
-
-    angular_velocity_tracking = calculate_reward(des_yaw_rate, self.robot.GetTrueBaseRollPitchYawRate()[2])
-
-    z_vel_penalty = - self.robot.GetBaseLinearVelocity()[2] ** 2
-
-    base_angular_velocity = self.robot.GetTrueBaseRollPitchYawRate()
-    omega_xy = base_angular_velocity[:2]  # Extract roll rate and pitch rate (x and y components)
-    angular_velocity_penalty = -np.linalg.norm(omega_xy)**2
+    # --- Constants & Weights (from Paper Source 185) ---
+    # The paper lists weights multiplied by dt (0.01). 
+    # We use the raw coefficients for per-step reward calculation.
+    w_vel_x    = 0.75
+    w_vel_y    = 0.75
+    w_yaw      = 0.5
+    w_z_pen    = 2.0     # Penalty for vertical bounce
+    w_ang_pen  = 0.05    # Penalty for roll/pitch rates
+    w_work_pen = 0.001   # Penalty for energy/work
     
-    work_penalty = 0
-    if hasattr(self, '_prev_motor_velocities'):
-        dq_diff = np.array(self._dt_motor_velocities[-1]) - np.array(self._prev_motor_velocities)
-        work_penalty = np.abs(np.dot(self._dt_motor_torques[-1], dq_diff))
-    self._prev_motor_velocities = self._dt_motor_velocities[-1].copy() if self._dt_motor_velocities else np.zeros(12)
+    # Gaussian Kernel: f(x) = exp(-x^2 / 0.25) [Source 185]
+    def gaussian(error, sigma_sq=0.25):
+        return np.exp(-(error**2) / sigma_sq)
 
-    # reward = 0.75 * self._time_step * x_vel_reward \
-    #         + 0.75 * self._time_step * y_vel_reward \
-    #         + 0.5 * self._time_step * angular_velocity_tracking \
-    #         + 2. * self._time_step * z_vel_penalty \
-    #         + 0.05 * self._time_step * angular_velocity_penalty \
-    #         + 0.001 * self._time_step * work_penalty \
-    reward = 0.75 * self._time_step * x_vel_reward \
-      + 0.75 * self._time_step * y_vel_reward \
-      + 2. * self._time_step * z_vel_penalty \
-      + 0.001 * self._time_step * work_penalty \
+    # --- 1. Velocity Tracking (Body X) [Positive Reward] ---
+    # "linear velocity tracking, body x direction" [Source 183]
+    actual_vel_x = self.robot.GetBaseLinearVelocity()[0]
+    if des_vel_x is not None:
+        r_vel_x = w_vel_x * gaussian(actual_vel_x - des_vel_x)
+    else:
+        # If no command, track 0 or maintain current (paper implies tracking logic)
+        r_vel_x = w_vel_x * gaussian(actual_vel_x - 0.0)
 
-    return max(reward,0) # keep rewards positive
+    # --- 2. Drift Tracking (Body Y) [Positive Reward] ---
+    # "linear velocity tracking, body y direction" [Source 183]
+    # Rewards keeping lateral velocity near 0.
+    actual_vel_y = self.robot.GetBaseLinearVelocity()[1]
+    r_vel_y = w_vel_y * gaussian(actual_vel_y - des_vel_y)
+
+    # --- 3. Yaw Rate Tracking [Positive Reward] ---
+    # "angular velocity tracking (body yaw rate)" [Source 183]
+    actual_yaw_rate = self.robot.GetBaseAngularVelocity()[2]
+    r_yaw = w_yaw * gaussian(actual_yaw_rate - des_yaw_rate)
+
+    # --- 4. Vertical Velocity Penalty [Negative] ---
+    # "linear velocity penalty in body z direction" [Source 183]
+    # Penalizes bouncing.
+    actual_vel_z = self.robot.GetBaseLinearVelocity()[2]
+    r_z = -w_z_pen * (actual_vel_z**2)
+
+    # --- 5. Angular Rate Penalty (Roll/Pitch) [Negative] ---
+    # "angular velocity penalty... -||w_b,xy||^2" [Source 183]
+    # Note: Penalizes RATES (wobble), not POSITION (tilt). 
+    # This prevents the "stiff robot" problem.
+    ang_vel = self.robot.GetBaseAngularVelocity()
+    w_xy_sq = ang_vel[0]**2 + ang_vel[1]**2
+    r_ang_stab = -w_ang_pen * w_xy_sq
+
+    # --- 6. Work/Energy Penalty [Negative] ---
+    # "work ... -|tau * q_dot|" [Source 184]
+    # Using dot product for instantaneous power
+    if self._dt_motor_torques and self._dt_motor_velocities:
+        power = np.abs(np.dot(self._dt_motor_torques[-1], 
+                              self._dt_motor_velocities[-1]))
+        r_work = -w_work_pen * power
+    else:
+        r_work = 0.0
+
+    # --- Summation ---
+    # Because r_vel_y and r_yaw are positive Gaussian terms, 
+    # the robot gets ~1.25 reward just for standing still. 
+    # This acts as the "Implicit Survival Bonus".
+    reward = r_vel_x + r_vel_y + r_yaw + r_z + r_ang_stab + r_work
+    
+    # Optional: Explicit Survival Bonus
+    # Uncomment if your robot still terminates early during the first 100 iterations.
+    # reward += 1.0 
+    
+    return reward
 
   def _reward(self):
     """ Get reward depending on task"""
