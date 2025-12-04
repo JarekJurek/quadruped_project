@@ -159,6 +159,7 @@ class QuadrupedGymEnv(gym.Env):
       orientation_weight=1.0,
       enable_vmc=False,
       k_vmc=250,
+      dot_prod_min=0.85,
       **kwargs): # any extra arguments from legacy
     """Initialize the quadruped gym environment.
     Args:
@@ -235,6 +236,8 @@ class QuadrupedGymEnv(gym.Env):
 
     self.enable_vmc = enable_vmc
     self.k_vmc = k_vmc
+
+    self.dot_prod_min = dot_prod_min
 
     self._sample_vel_interval = 4.0
 
@@ -500,7 +503,7 @@ class QuadrupedGymEnv(gym.Env):
 
   def _termination(self):
     """Decide whether we should stop the episode and reset the environment. """
-    return self.is_fallen() 
+    return self.is_fallen(dot_prod_min=self.dot_prod_min) 
 
   def _reward_fwd_locomotion(self, des_vel_x=None):
     """Learn forward locomotion at a desired velocity. """
@@ -571,6 +574,8 @@ class QuadrupedGymEnv(gym.Env):
     # Penalize vertical velocity (should stay at constant height)
     vertical_vel = self.robot.GetBaseLinearVelocity()[2]
     height_reward = -1.0 * vertical_vel**2
+
+    survival_reward = 1.0
     
     # Total reward
     reward = vel_tracking_reward \
@@ -578,7 +583,8 @@ class QuadrupedGymEnv(gym.Env):
             + yaw_reward \
             + orientation_reward \
             + energy_reward \
-            + height_reward
+            + height_reward \
+            + survival_reward
     
     return reward  # Don't clamp to zero - allow negative rewards
 
