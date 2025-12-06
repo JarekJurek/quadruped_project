@@ -213,9 +213,9 @@ class QuadrupedGymEnv(gym.Env):
       self._observation_noise_stdev = 0.0
 
     self._randomize_cpg_params = randomize_cpg_params
-    self._h_min = 0.1
+    self._h_min = 0.2
     self._h_max = 0.3
-    self._g_c_min = 0.02 
+    self._g_c_min = 0.04 
     self._g_c_max = 0.2
     self.des_h = des_h
     self.des_g_c = des_g_c
@@ -1064,6 +1064,13 @@ class QuadrupedGymEnv(gym.Env):
     self._last_action = np.zeros(self._action_dim)
 
     if hasattr(self, '_cpg'):
+      self._cpg.X = np.zeros((2,4))
+      self._cpg.X[0,:] = np.random.rand(4) * 0.1 
+      self._cpg.X[1,:] = self._cpg.PHI[0,:] 
+      
+      if self._cpg.use_RL:
+          self._cpg.X[0,:] = MU_LOW
+          
       # Force CPG to update and ensure states are initialized
       self._cpg.update()
 
