@@ -1065,12 +1065,9 @@ class QuadrupedGymEnv(gym.Env):
 
     if hasattr(self, '_cpg'):
       self._cpg.X = np.zeros((2,4))
-      self._cpg.X[0,:] = np.random.rand(4) * 0.1 
-      self._cpg.X[1,:] = self._cpg.PHI[0,:] 
-      
-      if self._cpg.use_RL:
-          self._cpg.X[0,:] = MU_LOW
-          
+      self._cpg.X[0,:] = 0.1
+      self._cpg.X[1,:] = self._cpg.PHI[0,:]
+
       # Force CPG to update and ensure states are initialized
       self._cpg.update()
 
