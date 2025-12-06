@@ -89,6 +89,7 @@ def load_sb3(args):
     env_config["enable_vmc"] = args.enable_vmc
     env_config["k_vmc"] = args.k_vmc
     env_config["orientation_weight"] = args.orientation_weight
+    env_config["max_episode_length"] = args.sim_time / 100
 
     # get latest model and normalization stats, and plot 
     stats_path = os.path.join(log_dir, "vec_normalize.pkl")
@@ -126,6 +127,8 @@ def load_sb3(args):
         action, _states = model.predict(obs,deterministic=False) # sample at test time? ([TODO]: test if the outputs make sense)
         obs, rewards, dones, info = env.step(action)
         episode_reward += rewards
+
+        print(f"load sb3 steps: {i}")
         
         if dones:
             print('episode_reward', episode_reward)
