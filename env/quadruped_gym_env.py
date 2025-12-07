@@ -157,6 +157,8 @@ class QuadrupedGymEnv(gym.Env):
       drift_weight=0.5, 
       yaw_weight=0.5,
       orientation_weight=1.0,
+      height_weight=1.0,
+      survival_weight=1.0,
       enable_vmc=False,
       k_vmc=250,
       dot_prod_min=0.85,
@@ -233,6 +235,8 @@ class QuadrupedGymEnv(gym.Env):
     self._drift_weight = drift_weight
     self._yaw_weight = yaw_weight
     self._orientation_weight = orientation_weight
+    self._height_weight = height_weight
+    self._survival_weight = survival_weight
 
     self.enable_vmc = enable_vmc
     self.k_vmc = k_vmc
@@ -538,7 +542,9 @@ class QuadrupedGymEnv(gym.Env):
                                     vel_tracking_weight=1.0, 
                                     drift_weight=0.5, 
                                     yaw_weight=0.5,
-                                    orientation_weight=1.0):
+                                    orientation_weight=1.0,
+                                    height_weight=1.0,
+                                    survival_weight=1.0):
     """Learn forward locomotion at a desired velocity."""
     
     # Velocity tracking reward
@@ -573,9 +579,9 @@ class QuadrupedGymEnv(gym.Env):
     
     # Penalize vertical velocity (should stay at constant height)
     vertical_vel = self.robot.GetBaseLinearVelocity()[2]
-    height_reward = -1.0 * vertical_vel**2
+    height_reward = -height_weight * vertical_vel**2
 
-    survival_reward = 1.0
+    survival_reward = 1.0 * survival_weight
     
     # Total reward
     reward = vel_tracking_reward \
@@ -829,7 +835,9 @@ class QuadrupedGymEnv(gym.Env):
                                                 vel_tracking_weight=self._vel_tracking_weight,
                                                 drift_weight=self._drift_weight,
                                                 yaw_weight=self._yaw_weight,
-                                                orientation_weight=self._orientation_weight)
+                                                orientation_weight=self._orientation_weight,
+                                                height_weight=self._height_weight,
+                                                survival_weight=self._survival_weight)
     elif self._TASK_ENV == "FWD_BASIC":
       return self._reward_fwd_locomotion_basic()
     elif self._TASK_ENV == "LR_COURSE_TASK":

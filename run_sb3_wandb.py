@@ -239,6 +239,8 @@ def run_sb3(args):
         "drift_weight": args.drift_weight,
         "yaw_weight": args.yaw_weight,
         "orientation_weight": args.orientation_weight,
+        "survival_weight": args.survival_weight,
+        "height_weight": args.height_weight,
         "enable_vmc": args.enable_vmc,
         "k_vmc": args.k_vmc,
     }
@@ -480,6 +482,8 @@ def parse_arguments():
     parser.add_argument("--drift_weight", type=float, default=0.5, help="Weight for drift penalty in the reward function")
     parser.add_argument("--yaw_weight", type=float, default=0.5, help="Weight for yaw penalty in the reward function")
     parser.add_argument("--orientation_weight", type=float, default=1.0, help="Weight for orientation penalty in the reward function")
+    parser.add_argument("--survival_weight", type=float, default=1.0, help="")
+    parser.add_argument("--height_weight", type=float, default=1.0, help="")
 
     parser.add_argument("--enable_vmc", action="store_true", help="Enable Virtual Model Control (VMC)")
     parser.add_argument("--k_vmc", type=float, default=250.0, help="VMC gain parameter")

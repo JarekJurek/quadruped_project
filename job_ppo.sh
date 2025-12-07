@@ -3,7 +3,7 @@
 ### –- specify queue --
 #BSUB -q hpc
 ### -- set the job Name --
-#BSUB -J quadruped_rl_ppo_rand_vel_scratch_weights
+#BSUB -J quadruped_rl_ppo_obstacles_curr_scratch_wo_weights
 ### -- ask for number of cores (default: 1) --
 #BSUB -n 30
 ### -- Set the span of the job to 1 node --
@@ -31,6 +31,6 @@ conda activate quadruped
 
 # python run_sb3_wandb.py --project-name quadruped_rl --run-name adaptive_lr_adapt_vel_finetune_2 --save-path /work3/s243600 --learning-alg PPO --num-envs 40 --task_env FWD_CUSTOM --observation_space_mode LR_COURSE_OBS_EXTENDED --total_timesteps 5000000 --learning_rate 3e-4 --max_episode_length 20 --randomize_velocity_command --learning_rate_adaptive --load-nn --load_model_path /work3/s243600/logs/intermediate_models/quadruped_rl/adaptive_lr_adapt_vel_finetune/112825001511
 
-# python run_sb3_wandb.py --project-name quadruped_rl --run-name obstacles_curr_scratch --save-path /work3/s243600 --learning-alg PPO --num-envs 40 --task_env FWD_CUSTOM --observation_space_mode LR_COURSE_OBS_EXTENDED --total_timesteps 3000000 --learning_rate 3e-4 --max_episode_length 20 --learning_rate_adaptive --num_stairs 5 --terrain_difficulty 3 --terrain STAIRS
+# python run_sb3_wandb.py --project-name quadruped_rl --run-name obstacles_curr_scratch_wo_weights --save-path /work3/s243600 --learning-alg PPO --num-envs 40 --task_env FWD_CUSTOM --observation_space_mode LR_COURSE_OBS_EXTENDED --total_timesteps 5000000 --learning_rate 3e-4 --max_episode_length 20 --learning_rate_adaptive --num_stairs 5 --terrain_difficulty 3 --terrain STAIRS --difficulty_objective height --drift_weight 0.0 --yaw_weight 0.0 --orientation_weight 0.0 --height_weight 0.0 --survival_weight 0.0
 
-python run_sb3_wandb.py --project-name quadruped_rl --run-name rand_vel_weights_orient --save-path /work3/s243600 --learning-alg PPO --num-envs 40 --task_env FWD_CUSTOM --observation_space_mode LR_COURSE_OBS_EXTENDED --total_timesteps 5000000 --learning_rate 3e-4 --max_episode_length 20 --learning_rate_adaptive --randomize_cpg_params True --randomize_velocity_command --orientation_weight 2.0
+python run_sb3_wandb.py --project-name quadruped_rl --run-name flat_wo_weights --save-path /work3/s243600 --learning-alg PPO --num-envs 40 --task_env FWD_CUSTOM --observation_space_mode LR_COURSE_OBS_EXTENDED --total_timesteps 5000000 --learning_rate 3e-4 --max_episode_length 20 --learning_rate_adaptive --randomize_cpg_params True --randomize_velocity_command --drift_weight 0.0 --yaw_weight 0.0 --orientation_weight 0.0 --height_weight 0.0 --survival_weight 0.0
