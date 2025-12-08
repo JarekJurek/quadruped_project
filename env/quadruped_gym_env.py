@@ -555,10 +555,15 @@ class QuadrupedGymEnv(gym.Env):
     else:
         # Reward forward velocity with saturation
         vel_tracking_reward = vel_tracking_weight * np.clip(actual_vel_x, 0.0, 1.0)
+
+    vel_sq_error = (des_vel_x - self.robot.GetBaseLinearVelocity()[0])**2 + \
+                   (0.0 - self.robot.GetBaseLinearVelocity()[1])**2
+    vel_tracking_reward = np.exp(-vel_sq_error / 0.25)
     
     # Penalize lateral drift
     lateral_vel = self.robot.GetBaseLinearVelocity()[1]
     drift_reward = -drift_weight * lateral_vel**2
+    drift_reward = -drift_weight * np.exp(-((lateral_vel - 0.0)**2) / 0.25)
     
     # Penalize yaw deviation (go straight)
     yaw = self.robot.GetBaseOrientationRollPitchYaw()[2]
@@ -566,7 +571,10 @@ class QuadrupedGymEnv(gym.Env):
     
     # Penalize roll and pitch to maintain upright posture
     roll, pitch, _ = self.robot.GetBaseOrientationRollPitchYaw()
-    orientation_reward = -orientation_weight * (roll**2 + pitch**2)
+    orientation_penalty = -orientation_weight * (roll**2 + pitch**2)
+
+    base_angular_velocity = self.robot.GetTrueBaseRollPitchYawRate()
+    orientation_penalty = -orientation_weight * np.linalg.norm(base_angular_velocity[:2])**2
     
     # Energy penalty (instantaneous power, not accumulated)
     if self._dt_motor_torques and self._dt_motor_velocities:
@@ -587,7 +595,7 @@ class QuadrupedGymEnv(gym.Env):
     reward = vel_tracking_reward \
             + drift_reward \
             + yaw_reward \
-            + orientation_reward \
+            + orientation_penalty \
             + energy_reward \
             + height_reward \
             + survival_reward
