@@ -162,6 +162,8 @@ class QuadrupedGymEnv(gym.Env):
       enable_vmc=False,
       k_vmc=250,
       dot_prod_min=0.85,
+      kp=None,
+      kd=None,
       **kwargs): # any extra arguments from legacy
     """Initialize the quadruped gym environment.
     Args:
@@ -248,6 +250,9 @@ class QuadrupedGymEnv(gym.Env):
     self.num_stairs = num_stairs
     self.stair_height = stair_height
     self.stair_width = stair_width
+
+    self.kp = kp
+    self.kd = kd
 
     # other bookkeeping 
     self._num_bullet_solver_iterations = int(300 / action_repeat) 
@@ -970,10 +975,20 @@ class QuadrupedGymEnv(gym.Env):
       # call inverse kinematics to get corresponding joint angles
       q_des = np.zeros(3) # [TODO]
       q_des = self.robot.ComputeInverseKinematics(i, [x, y, z])
+
+      if self.kp is not None:
+        kp = self.kp
+      else:
+        kp = robot_config.kp
+
+      if self.kd is not None:
+        kd = self.kd
+      else:
+        kd = robot_config.kd
       
       # Add joint PD contribution to tau
       tau = np.zeros(3) # [TODO]
-      tau += robot_config.kp @ (q_des - q[3*i:3*i+3]) + robot_config.kd @ (-dq[3*i:3*i+3])
+      tau += kp @ (q_des - q[3*i:3*i+3]) + kd @ (-dq[3*i:3*i+3])
 
       # add Cartesian PD contribution (as you wish)
       # _, des_xyz_leg_pos = self.robot.ComputeJacobianAndPosition(legID=i, specific_q=q_des)

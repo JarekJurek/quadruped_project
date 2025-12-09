@@ -243,6 +243,8 @@ def run_sb3(args):
         "height_weight": args.height_weight,
         "enable_vmc": args.enable_vmc,
         "k_vmc": args.k_vmc,
+        "kp": args.kp,
+        "kd": args.kd,
     }
     
     # Log environment configuration to wandb
@@ -505,6 +507,9 @@ def parse_arguments():
     parser.add_argument("--num_stairs", type=int, default=12, help="desired h - z of the body")
     parser.add_argument("--stair_height", type=float, default=0.05, help="desired h - z of the body")
     parser.add_argument("--stair_width", type=float, default=0.25, help="desired h - z of the body")
+
+    parser.add_argument("--kp", type=float, help="kp")
+    parser.add_argument("--kd", type=float, help="kd")
 
     # PPO Hyperparams
     parser.add_argument("--batch_size", type=int, default=8192, help="Size of rollout / batch size")
