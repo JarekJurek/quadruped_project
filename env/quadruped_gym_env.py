@@ -977,12 +977,12 @@ class QuadrupedGymEnv(gym.Env):
       q_des = self.robot.ComputeInverseKinematics(i, [x, y, z])
 
       if self.kp is not None:
-        kp = self.kp
+        kp = np.diag([self.kp, self.kp, self.kp])
       else:
         kp = robot_config.kp
 
       if self.kd is not None:
-        kd = self.kd
+        kd = np.diag([self.kd, self.kd, self.kd])
       else:
         kd = robot_config.kd
       
