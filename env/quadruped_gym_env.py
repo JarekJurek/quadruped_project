@@ -164,6 +164,7 @@ class QuadrupedGymEnv(gym.Env):
       dot_prod_min=0.85,
       kp=None,
       kd=None,
+      slope_pitch=0.2,
       **kwargs): # any extra arguments from legacy
     """Initialize the quadruped gym environment.
     Args:
@@ -250,6 +251,8 @@ class QuadrupedGymEnv(gym.Env):
     self.num_stairs = num_stairs
     self.stair_height = stair_height
     self.stair_width = stair_width
+
+    self.slope_pitch = slope_pitch
 
     self.kp = kp
     self.kd = kd
@@ -1522,7 +1525,7 @@ class QuadrupedGymEnv(gym.Env):
     block2=self._pybullet_client.createMultiBody(baseMass=0,baseCollisionShapeIndex = sh_colBox,
                           basePosition = [x_upp/2,-y_low,0.5],baseOrientation=orn)
 
-  def add_slopes(self, pitch=0.2):
+  def add_slopes(self):
     """Add slopes with platform in center."""
     y = 6
     slope_len = 2
@@ -1532,25 +1535,25 @@ class QuadrupedGymEnv(gym.Env):
     # add first slope UP
     sh_colBox = self._pybullet_client.createCollisionShape(self._pybullet_client.GEOM_BOX,
         halfExtents=[slope_len/2,y/2,slope_height])
-    orn = self._pybullet_client.getQuaternionFromEuler([0,-pitch,0])
+    orn = self._pybullet_client.getQuaternionFromEuler([0,-self.slope_pitch,0])
     block2=self._pybullet_client.createMultiBody(baseMass=0,baseCollisionShapeIndex=sh_colBox,
-        basePosition = [1+slope_len/2,0,slope_len/2*np.sin(pitch) - slope_height*np.cos(pitch) ],baseOrientation=orn)
+        basePosition = [1+slope_len/2,0,slope_len/2*np.sin(self.slope_pitch) - slope_height*np.cos(self.slope_pitch) ],baseOrientation=orn)
     self._pybullet_client.changeDynamics(block2, -1, lateralFriction=self._ground_mu_k)
 
     # add middle box
     sh_colBox = self._pybullet_client.createCollisionShape(self._pybullet_client.GEOM_BOX,
-        halfExtents=[box_width/2,y/2,slope_len/2*np.sin(pitch)])
+        halfExtents=[box_width/2,y/2,slope_len/2*np.sin(self.slope_pitch)])
     orn = self._pybullet_client.getQuaternionFromEuler([0,0,0])
     block2=self._pybullet_client.createMultiBody(baseMass=0,baseCollisionShapeIndex=sh_colBox,
-        basePosition = [1+slope_len*np.cos(pitch)+box_width/2,0,slope_len/2*np.sin(pitch)  ],baseOrientation=orn) # + slope_height/2*np.cos(pitch)
+        basePosition = [1+slope_len*np.cos(self.slope_pitch)+box_width/2,0,slope_len/2*np.sin(self.slope_pitch)  ],baseOrientation=orn) # + slope_height/2*np.cos(self.slope_pitch)
     self._pybullet_client.changeDynamics(block2, -1, lateralFriction=self._ground_mu_k)
 
     # add descending box
     sh_colBox = self._pybullet_client.createCollisionShape(self._pybullet_client.GEOM_BOX,
         halfExtents=[slope_len/2,y/2,slope_height])
-    orn = self._pybullet_client.getQuaternionFromEuler([0,pitch,0])
+    orn = self._pybullet_client.getQuaternionFromEuler([0,self.slope_pitch,0])
     block2=self._pybullet_client.createMultiBody(baseMass=0,baseCollisionShapeIndex=sh_colBox,
-        basePosition = [1+slope_len*np.cos(pitch)+box_width + slope_len/2 + 2*slope_height*np.sin(-pitch),0,slope_len/2*np.sin(pitch) - slope_height*np.cos(pitch) ],baseOrientation=orn) # + slope_height/2*np.cos(pitch)
+        basePosition = [1+slope_len*np.cos(self.slope_pitch)+box_width + slope_len/2 + 2*slope_height*np.sin(-self.slope_pitch),0,slope_len/2*np.sin(self.slope_pitch) - slope_height*np.cos(self.slope_pitch) ],baseOrientation=orn) # + slope_height/2*np.cos(self.slope_pitch)
     self._pybullet_client.changeDynamics(block2, -1, lateralFriction=self._ground_mu_k)
     self._add_walls()
 
