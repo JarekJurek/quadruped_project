@@ -476,7 +476,7 @@ def parse_arguments():
     parser.add_argument("--load-nn", action="store_true", help="Initialize training with a previous model")
     parser.add_argument("--load_model_path", type=str, help="Path for loading pretrained model", default=".")
 
-    parser.add_argument("--des_x_vel", type=float, default=0.4, help="desired linear velocity x axis")
+    parser.add_argument("--des_x_vel", type=float, default=0.6, help="desired linear velocity x axis")
     parser.add_argument("--des_vel_x_min", type=float, default=0.3, help="desired linear velocity x axis")
     parser.add_argument("--des_vel_x_max", type=float, default=0.8, help="desired linear velocity x axis")
 
@@ -490,8 +490,8 @@ def parse_arguments():
     parser.add_argument("--enable_vmc", action="store_true", help="Enable Virtual Model Control (VMC)")
     parser.add_argument("--k_vmc", type=float, default=250.0, help="VMC gain parameter")
 
-    parser.add_argument("--des_h", type=float, default=0.3, help="desired body height")
-    parser.add_argument("--des_g_c", type=float, default=0.15, help="desired max feet height")
+    parser.add_argument("--des_h", type=float, default=0.25, help="desired body height")
+    parser.add_argument("--des_g_c", type=float, default=0.08, help="desired max feet height")
 
     parser.add_argument("--total_timesteps", type=int, default=1000000, help="Total timesteps")
     parser.add_argument("--time_step", type=float, default=0.001, help="time step, for CPG_RL 0.01 s")
