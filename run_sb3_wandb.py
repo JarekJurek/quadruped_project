@@ -64,6 +64,51 @@ class CustomCallback(BaseCallback):
         self.slope_pitch = slope_pitch
 
         self.terrain = terrain
+    
+    def _get_current_level(self):
+        """Calculates the current difficulty level based on timesteps."""
+        if self.terrain_difficulty_levels <= 0:
+            return 1
+        
+        # Calculate how many steps constitute one "level"
+        steps_per_level = self.total_timesteps_train / self.terrain_difficulty_levels
+        
+        # Determine current level (1-based index)
+        current_level = int(self.num_timesteps / steps_per_level) + 1
+        
+        # Clamp to max difficulty
+        return min(current_level, self.terrain_difficulty_levels)
+
+    def _update_environment_difficulty(self, current_level, max_val, min_val, param_name, aux_params=None):
+        """Updates the environment parameter based on the current level."""
+        # Calculate new value linearly
+        ratio = current_level / self.terrain_difficulty_levels
+        
+        if isinstance(max_val, int):
+            new_val = int(ratio * max_val)
+        else:
+            new_val = ratio * max_val
+            
+        new_val = max(min_val, new_val)
+
+        # Only update environment if the value has changed
+        if new_val != self.last_set_value:
+            if self.verbose > 0:
+                print(f"Curriculum Update at step {self.num_timesteps}: Difficulty Level {current_level}/{self.terrain_difficulty_levels}, {param_name} set to {new_val}")
+            
+            # Update the environment variable
+            self.training_env.set_attr(param_name, new_val)
+            
+            # Set auxiliary parameters if any (e.g. resetting num_stairs when changing height)
+            if aux_params:
+                for k, v in aux_params.items():
+                    self.training_env.set_attr(k, v)
+            
+            self.last_set_value = new_val
+        
+        # Record curriculum state
+        self.logger.record("train/curriculum_level", current_level)
+        self.logger.record(f"train/current_{param_name}", new_val)
 
     def _on_training_start(self) -> None:
         """
@@ -96,89 +141,34 @@ class CustomCallback(BaseCallback):
             self._update_learning_rate(self.current_lr)
             self.logger.record("train/learning_rate_adaptive", self.current_lr)
 
-        if self.terrain == "STAIRS":
-            if self.terrain_difficulty_levels > 0 and self.max_num_stairs > 0 and self.difficulty_objective == "number":
-                # Calculate how many steps constitute one "level"
-                steps_per_level = self.total_timesteps_train / self.terrain_difficulty_levels
-                
-                # Determine current level (1-based index)
-                # e.g., if total=1M, levels=5: 0-200k is Level 1, 200k-400k is Level 2...
-                current_level = int(self.num_timesteps / steps_per_level) + 1
-                
-                # Clamp to max difficulty
-                current_level = min(current_level, self.terrain_difficulty_levels)
-                
-                # Calculate number of stairs for this difficulty level
-                # Formula scales linearly: Level 1 gets (1/N)*Max, Level N gets (N/N)*Max
-                new_num_stairs = int((current_level / self.terrain_difficulty_levels) * self.max_num_stairs)
-                
-                # Ensure at least 1 stair if we are in the curriculum logic
-                new_num_stairs = max(1, new_num_stairs)
+        # Curriculum Learning Logic
+        if self.terrain_difficulty_levels > 0:
+            current_level = self._get_current_level()
 
-                # Only update environment if the number of stairs has changed
-                if new_num_stairs != self.last_set_stairs:
-                    if self.verbose > 0:
-                        print(f"Curriculum Update at step {self.num_timesteps}: Difficulty Level {current_level}/{self.terrain_difficulty_levels}, Num Stairs set to {new_num_stairs}")
-                    
-                    # Update the environment variable
-                    self.training_env.set_attr("num_stairs", new_num_stairs)
-                    self.last_set_stairs = new_num_stairs
-                
-                # Record curriculum state
-                self.logger.record("train/curriculum_level", current_level)
-                self.logger.record("train/current_num_stairs", new_num_stairs)
-            elif self.terrain_difficulty_levels > 0 and self.max_step_height > 0 and self.difficulty_objective == "height":
-                # Calculate how many steps constitute one "level"
-                height_per_level = self.max_step_height / self.terrain_difficulty_levels
-                
-                # Determine current level (1-based index)
-                # e.g., if total=1M, levels=5: 0-200k is Level 1, 200k-400k is Level 2...
-                current_level = int(self.num_timesteps / height_per_level) + 1
-                
-                # Clamp to max difficulty
-                current_level = min(current_level, self.terrain_difficulty_levels)
-                
-                # Calculate number of stairs for this difficulty level
-                # Formula scales linearly: Level 1 gets (1/N)*Max, Level N gets (N/N)*Max
-                new_step_height = int((current_level / self.terrain_difficulty_levels) * self.max_step_height)
-                
-                # Ensure at least 1 stair if we are in the curriculum logic
-                new_step_height = max(0.01, new_step_height)
-
-                # Only update environment if the number of stairs has changed
-                if new_step_height != self.last_set_stairs:
-                    if self.verbose > 0:
-                        print(f"Curriculum Update at step {self.num_timesteps}: Difficulty Level {current_level}/{self.terrain_difficulty_levels}, Step Height set to {new_step_height}")
-                    
-                    # Update the environment variable
-                    self.training_env.set_attr("num_stairs", 1)
-                    self.training_env.set_attr("stair_height", new_step_height)
-                    self.last_set_stairs = new_step_height
-                
-                # Record curriculum state
-                self.logger.record("train/curriculum_level", current_level)
-                self.logger.record("train/current_num_stairs", new_step_height)
-        elif self.terrain == "SLOPES":
-            pitch_per_level = self.slope_pitch / self.terrain_difficulty_levels
-
-            current_level = int(self.num_timesteps / pitch_per_level) + 1
-                
-            # Clamp to max difficulty
-            current_level = min(current_level, self.terrain_difficulty_levels)
-            
-            # Calculate number of stairs for this difficulty level
-            # Formula scales linearly: Level 1 gets (1/N)*Max, Level N gets (N/N)*Max
-            new_pitch = int((current_level / self.terrain_difficulty_levels) * self.slope_pitch)
-            
-            # Ensure at least 1 stair if we are in the curriculum logic
-            new_pitch = max(0.01, new_pitch)
-
-            if new_pitch != self.last_set_pitch:
-                
-                # Update the environment variable
-                self.training_env.set_attr("num_stairs", 1)
-                self.training_env.set_attr("slope_pitch", new_pitch)
-                self.last_set_stairs = new_pitch
+            if self.terrain == "STAIRS":
+                if self.difficulty_objective == "number" and self.max_num_stairs > 0:
+                    self._update_environment_difficulty(
+                        current_level=current_level,
+                        max_val=self.max_num_stairs,
+                        min_val=1,
+                        param_name="num_stairs"
+                    )
+                elif self.difficulty_objective == "height" and self.max_step_height > 0:
+                    self._update_environment_difficulty(
+                        current_level=current_level,
+                        max_val=self.max_step_height,
+                        min_val=0.01,
+                        param_name="stair_height",
+                        aux_params={"num_stairs": 1}
+                    )
+            elif self.terrain == "SLOPES":
+                self._update_environment_difficulty(
+                    current_level=current_level,
+                    max_val=self.slope_pitch,
+                    min_val=0.01,
+                    param_name="slope_pitch",
+                    aux_params={"num_stairs": 1}
+                )
 
 
     def _update_learning_rate(self, new_lr):
