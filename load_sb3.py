@@ -90,6 +90,7 @@ def load_sb3(args):
     env_config["k_vmc"] = args.k_vmc
     env_config["orientation_weight"] = args.orientation_weight
     env_config["max_episode_length"] = args.sim_time / 100
+    env_config["slope_pitch"] = args.slope_pitch
 
     # get latest model and normalization stats, and plot 
     stats_path = os.path.join(log_dir, "vec_normalize.pkl")
@@ -196,6 +197,7 @@ def parse_arguments():
     parser.add_argument("--num_stairs", type=int, default=12, help="desired h - z of the body")
     parser.add_argument("--stair_height", type=float, default=0.05, help="desired h - z of the body")
     parser.add_argument("--stair_width", type=float, default=0.25, help="desired h - z of the body")
+    parser.add_argument("--slope_pitch", type=float, default=0.2, help="")
 
     parser.add_argument("--learning-alg", type=str, default="PPO", choices=["PPO", "SAC"], help="Learning algorithm to use (default: PPO)")
     parser.add_argument("--motor_control_mode", type=str, default="CPG", choices=["CPG", "PD","TORQUE", "CARTESIAN_PD"], help="Motor control mode")
