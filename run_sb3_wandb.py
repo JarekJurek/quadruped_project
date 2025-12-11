@@ -176,7 +176,6 @@ class CustomCallback(BaseCallback):
             if new_pitch != self.last_set_pitch:
                 
                 # Update the environment variable
-                self.training_env.set_attr("num_stairs", 1)
                 self.training_env.set_attr("slope_pitch", new_pitch)
                 self.last_set_stairs = new_pitch
 
