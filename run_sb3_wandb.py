@@ -262,6 +262,10 @@ def run_sb3(args):
         "k_vmc": args.k_vmc,
         "kp": args.kp,
         "kd": args.kd,
+        "disable_drift":args.disable_drift, 
+        "disable_yaw":args.disable_yaw, 
+        "disable_orientation":args.disable_orientation,
+        "disable_energy":args.disable_energy,
     }
     
     # Log environment configuration to wandb
@@ -505,6 +509,11 @@ def parse_arguments():
     parser.add_argument("--orientation_weight", type=float, default=1.0, help="Weight for orientation penalty in the reward function")
     parser.add_argument("--survival_weight", type=float, default=1.0, help="")
     parser.add_argument("--height_weight", type=float, default=1.0, help="")
+
+    parser.add_argument("--disable_drift", type=bool, default=False, help="")
+    parser.add_argument("--disable_yaw", type=bool, default=False, help="")
+    parser.add_argument("--disable_orientation", type=bool, default=False, help="")
+    parser.add_argument("--disable_energy", type=bool, default=False, help="")
 
     parser.add_argument("--enable_vmc", action="store_true", help="Enable Virtual Model Control (VMC)")
     parser.add_argument("--k_vmc", type=float, default=250.0, help="VMC gain parameter")

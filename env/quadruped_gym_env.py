@@ -165,6 +165,10 @@ class QuadrupedGymEnv(gym.Env):
       kp=None,
       kd=None,
       slope_pitch=0.2,
+      disable_drift=False, 
+      disable_yaw=False, 
+      disable_orientation=False,
+      disable_energy=False,
       **kwargs): # any extra arguments from legacy
     """Initialize the quadruped gym environment.
     Args:
@@ -240,6 +244,11 @@ class QuadrupedGymEnv(gym.Env):
     self._orientation_weight = orientation_weight
     self._height_weight = height_weight
     self._survival_weight = survival_weight
+
+    self.disable_drift = disable_drift
+    self.disable_yaw = disable_yaw
+    self.disable_orientation = disable_orientation
+    self.disable_energy = disable_energy
 
     self.enable_vmc = enable_vmc
     self.k_vmc = k_vmc
@@ -610,7 +619,12 @@ class QuadrupedGymEnv(gym.Env):
     
     return reward
 
-  def _reward_fwd_locomotion_custom_old(self, des_vel_x=None):
+  def _reward_fwd_locomotion_custom_old(self, 
+                                        des_vel_x=None, 
+                                        disable_drift=False, 
+                                        disable_yaw=False, 
+                                        disable_orientation=False,
+                                        disable_energy=False):
     """Learn forward locomotion at a desired velocity."""
     
     # Velocity tracking reward
@@ -623,19 +637,25 @@ class QuadrupedGymEnv(gym.Env):
         vel_tracking_reward = 1.0 * np.clip(actual_vel_x, 0.0, 1.0)
     
     # Penalize lateral drift
+    drift_reward = 0.0
     lateral_vel = self.robot.GetBaseLinearVelocity()[1]
-    drift_reward = -0.5 * lateral_vel**2
+    if not disable_drift:
+      drift_reward = -0.5 * lateral_vel**2
     
     # Penalize yaw deviation (go straight)
     yaw = self.robot.GetBaseOrientationRollPitchYaw()[2]
-    yaw_reward = -0.5 * yaw**2
+    yaw_reward = 0.0
+    if not disable_yaw:
+      yaw_reward = -0.5 * yaw**2
     
     # Penalize roll and pitch to maintain upright posture
     roll, pitch, _ = self.robot.GetBaseOrientationRollPitchYaw()
-    orientation_reward = -1.0 * (roll**2 + pitch**2)
+    orientation_reward = 0.0
+    if not disable_orientation:
+      orientation_reward = -1.0 * (roll**2 + pitch**2)
     
     # Energy penalty (instantaneous power, not accumulated)
-    if self._dt_motor_torques and self._dt_motor_velocities:
+    if self._dt_motor_torques and self._dt_motor_velocities and not disable_energy:
         # Use only the most recent timestep
         instantaneous_power = np.abs(np.dot(self._dt_motor_torques[-1], 
                                             self._dt_motor_velocities[-1]))
@@ -902,7 +922,11 @@ class QuadrupedGymEnv(gym.Env):
                                                 height_weight=self._height_weight,
                                                 survival_weight=self._survival_weight)
     elif self._TASK_ENV == "FWD_CUSTOM_OLD":
-      return self._reward_fwd_locomotion_custom_old(des_vel_x=self._des_vel_x)
+      return self._reward_fwd_locomotion_custom_old(des_vel_x=self._des_vel_x, 
+                                                    disable_drift=self.disable_drift, 
+                                                    disable_yaw=self.disable_yaw, 
+                                                    disable_orientation=self.disable_orientation,
+                                                    disable_energy=self.disable_energy)
     elif self._TASK_ENV == "FWD_BASIC":
       return self._reward_fwd_locomotion_basic()
     elif self._TASK_ENV == "LR_COURSE_TASK":
