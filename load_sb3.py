@@ -179,16 +179,18 @@ def parse_arguments():
 
     parser.add_argument("--sim_time", type=int, default=500, help="Duration of the simulation in miliseconds (has to be integer)")
 
-    parser.add_argument("--des_x_vel", type=float, default=0.4, help="desired linear velocity x axis")
+    parser.add_argument("--des_x_vel", type=float, default=0.6, help="desired linear velocity x axis")
 
-    parser.add_argument("--des_h", type=float, default=0.3, help="desired h - z of the body")
-    parser.add_argument("--des_g_c", type=float, default=0.07, help="desired g_c - max z distance of a feet in swing phase")
+    parser.add_argument("--des_h", type=float, default=0.25, help="desired h - z of the body")
+    parser.add_argument("--des_g_c", type=float, default=0.08, help="desired g_c - max z distance of a feet in swing phase")
 
     parser.add_argument("--enable_vmc", action="store_true", help="Enable Virtual Model Control (VMC)")
     parser.add_argument("--k_vmc", type=float, default=250.0, help="VMC gain parameter")
 
     parser.add_argument("--orientation_weight", type=float, default=1.0, help="Weight for orientation penalty in the reward function")
 
+    parser.add_argument("--kp", type=float, help="kp")
+    parser.add_argument("--kd", type=float, help="kd")
 
     parser.add_argument("--terrain", type=str, default="NONE", choices=["STAIRS", "SLOPES", "GAPS", "RANDOM", "NONE"], help="Terrain, obstacles")
     parser.add_argument("--num_stairs", type=int, default=12, help="desired h - z of the body")
