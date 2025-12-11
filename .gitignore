@@ -4,3 +4,5 @@ wandb/
 logs/
 *.err
 trained_models/
+materials/
+videos/
