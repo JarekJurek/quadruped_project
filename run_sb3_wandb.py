@@ -266,6 +266,7 @@ def run_sb3(args):
         "disable_yaw":args.disable_yaw, 
         "disable_orientation":args.disable_orientation,
         "disable_energy":args.disable_energy,
+        "add_noise":args.add_noise,
     }
     
     # Log environment configuration to wandb
@@ -514,6 +515,8 @@ def parse_arguments():
     parser.add_argument("--disable_yaw", type=bool, default=False, help="")
     parser.add_argument("--disable_orientation", type=bool, default=False, help="")
     parser.add_argument("--disable_energy", type=bool, default=False, help="")
+
+    parser.add_argument("--add_noise", type=bool, default=True, help="")
 
     parser.add_argument("--enable_vmc", action="store_true", help="Enable Virtual Model Control (VMC)")
     parser.add_argument("--k_vmc", type=float, default=250.0, help="VMC gain parameter")
