@@ -153,6 +153,8 @@ class QuadrupedGymEnv(gym.Env):
       num_stairs=12, 
       stair_height=0.05, 
       stair_width=0.25,
+      h_min=0.2,
+      h_max=0.3,
       **kwargs): # any extra arguments from legacy
     """Initialize the quadruped gym environment.
     Args:
@@ -206,8 +208,8 @@ class QuadrupedGymEnv(gym.Env):
       self._observation_noise_stdev = 0.0
 
     self._randomize_cpg_params = randomize_cpg_params
-    self._h_min = 0.1
-    self._h_max = 0.3
+    self._h_min = h_min
+    self._h_max = h_max
     self._g_c_min = 0.02 
     self._g_c_max = 0.2
     self.des_h = des_h

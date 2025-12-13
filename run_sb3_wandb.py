@@ -158,7 +158,9 @@ def run_sb3(args):
                    "des_vel_x_min": args.des_vel_x_min,
                    "des_vel_x_max": args.des_vel_x_max,
                    "terrain": args.terrain,
-                   "randomize_velocity_command": args.randomize_velocity_command}
+                   "randomize_velocity_command": args.randomize_velocity_command,
+                   "h_min": args.h_min,
+                   "h_max": args.h_max}
     
     # Log environment configuration to wandb
     wandb.config.update({"env_configs": env_configs})
@@ -382,6 +384,9 @@ def parse_arguments():
     parser.add_argument("--des_x_vel", type=float, default=0.4, help="desired linear velocity x axis")
     parser.add_argument("--des_vel_x_min", type=float, default=0.3, help="desired linear velocity x axis")
     parser.add_argument("--des_vel_x_max", type=float, default=0.8, help="desired linear velocity x axis")
+
+    parser.add_argument("--h_min", type=float, default=0.2, help="")
+    parser.add_argument("--h_max", type=float, default=0.3, help="")
 
     parser.add_argument("--total_timesteps", type=int, default=1000000, help="Total timesteps")
     parser.add_argument("--time_step", type=float, default=0.001, help="time step, for CPG_RL 0.01 s")

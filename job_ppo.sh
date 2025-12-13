@@ -3,7 +3,7 @@
 ### –- specify queue --
 #BSUB -q hpc
 ### -- set the job Name --
-#BSUB -J quadruped_rl_ppo_adapt_lr_finetune
+#BSUB -J quadruped_rl_ppo_new_obs_check_h_min_0_2_fixed_vel_0_6
 ### -- ask for number of cores (default: 1) --
 #BSUB -n 30
 ### -- Set the span of the job to 1 node --
@@ -27,4 +27,5 @@ source /zhome/d4/a/214319/miniconda3/bin/activate
 
 conda activate quadruped
 
-python run_sb3_wandb.py --project-name quadruped_rl --run-name adaptive_lr_adapt_vel_finetune --save-path /work3/s243600 --learning-alg PPO --num-envs 40 --task_env FWD_CUSTOM --observation_space_mode LR_COURSE_OBS_EXTENDED --total_timesteps 3000000 --learning_rate 3e-4 --max_episode_length 20 --randomize_velocity_command --learning_rate_adaptive --load-nn --load_model_path /work3/s243600/logs/intermediate_models/quadruped_rl/new_obs_vel/112725175937
+# python run_sb3_wandb.py --project-name quadruped_rl --run-name adaptive_lr_adapt_vel_finetune --save-path /work3/s243600 --learning-alg PPO --num-envs 40 --task_env FWD_CUSTOM --observation_space_mode LR_COURSE_OBS_EXTENDED --total_timesteps 3000000 --learning_rate 3e-4 --max_episode_length 20 --randomize_velocity_command --learning_rate_adaptive --load-nn --load_model_path /work3/s243600/logs/intermediate_models/quadruped_rl/new_obs_vel/112725175937
+python run_sb3_wandb.py --project-name quadruped_rl --run-name new_obs_check_h_min_0_2_fixed_vel_0_6 --save-path /work3/s243600 --learning-alg PPO --num-envs 40 --task_env FWD_CUSTOM --observation_space_mode LR_COURSE_OBS_EXTENDED --total_timesteps 5000000 --learning_rate 3e-4 --max_episode_length 20 --des_x_vel 0.6 --h_min 0.2 --h_max 0.3
