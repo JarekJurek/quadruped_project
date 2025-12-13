@@ -39,6 +39,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from stable_baselines3 import PPO, SAC
+import pandas as pd
 
 # from stable_baselines3.common.cmd_util import make_vec_env
 from stable_baselines3.common.env_util import (
@@ -91,6 +92,7 @@ def load_sb3(args):
     env_config["orientation_weight"] = args.orientation_weight
     env_config["max_episode_length"] = args.sim_time / 100
     env_config["slope_pitch"] = args.slope_pitch
+    env_config["randomize_velocity_command"] = args.randomize_velocity_command
 
     # get latest model and normalization stats, and plot 
     stats_path = os.path.join(log_dir, "vec_normalize.pkl")
@@ -98,7 +100,7 @@ def load_sb3(args):
     monitor_results = load_results(log_dir)
     print(monitor_results)
     plot_results([log_dir] , 10e10, 'timesteps', args.learning_alg + ' ')
-    plt.show() 
+    plt.show()
 
     # reconstruct env 
     env = lambda: QuadrupedGymEnv(**env_config)
@@ -121,10 +123,27 @@ def load_sb3(args):
 
     base_pos = np.zeros((3, args.sim_time))
     base_vel = np.zeros((3, args.sim_time))
+    des_vel_x_hist = np.zeros(args.sim_time)
     t = np.arange(args.sim_time) * 0.001
 
+    cot_history = []
+
+    velocity_list = [0.75, 0.35]
+
     for i in range(args.sim_time):
-        # print(f"sim time: {i}")
+
+        if args.randomize_velocity_command:
+            bin_size = args.sim_time // len(velocity_list)
+            n = min(i // bin_size, len(velocity_list) - 1)
+            env._des_vel_x = velocity_list[n]
+            print(f"des_vel: {env._des_vel_x }")
+            print(f"bin_size: {bin_size}")
+        
+        if hasattr(env, "_des_vel_x"):
+            des_vel_x_hist[i] = env._des_vel_x
+        else:
+            des_vel_x_hist[i] = args.des_x_vel
+
         action, _states = model.predict(obs,deterministic=False) # sample at test time? ([TODO]: test if the outputs make sense)
         obs, rewards, dones, info = env.step(action)
         episode_reward += rewards
@@ -142,8 +161,54 @@ def load_sb3(args):
 
         # [TODO] save data from current robot states for plots 
         # To get base position, for example: env.envs[0].env.robot.GetBasePosition() 
+        quad_env = env.envs[0].unwrapped
+        if hasattr(quad_env, '_dt_motor_torques') and hasattr(quad_env, '_dt_motor_velocities'):
+            # Calculate mechanical power P = sum(|tau * w|) for all sub-steps
+            step_power = 0
+            for tau, vel in zip(quad_env._dt_motor_torques, quad_env._dt_motor_velocities):
+                step_power += np.sum(np.abs(np.array(tau) * np.array(vel)))
+            
+            # Average power over the physics steps in this env step
+            avg_power = step_power / len(quad_env._dt_motor_torques)
+            
+            # Get mass and forward velocity
+            total_mass = sum(quad_env.robot._total_mass_urdf)
+            v_x = base_vel[0, i]
+            
+            # CoT = P / (mgv)
+            if v_x > 0.05: # Avoid division by zero or very small velocities
+                cot = avg_power / (total_mass * 9.81 * v_x)
+                cot_history.append(cot)
+            else:
+                cot_history.append(0.0) 
         
     # [TODO] make plots
+
+    print(f"mean COT: {np.mean(cot_history)}")
+
+    data = {
+        'time': t,
+        'pos_x': base_pos[0, :],
+        'pos_y': base_pos[1, :],
+        'pos_z': base_pos[2, :],
+        'vel_x': base_vel[0, :],
+        'vel_y': base_vel[1, :],
+        'vel_z': base_vel[2, :],
+        'des_vel_x': des_vel_x_hist,
+        'cot': cot_history
+    }
+
+    model_name = log_dir.split("/")[-1]
+    if model_name == "":
+        model_name = log_dir.split("/")[-2]
+    print(f"model name: {model_name}")
+    print(f"log_dir: {log_dir}")
+    
+    df = pd.DataFrame(data)
+    # csv_filename = os.path.join(log_dir, f"simulation_data_{args.project_name}_{model_name}.csv")
+    csv_filename = f"simulation_data_{args.project_name}_{model_name}.csv"
+    df.to_csv(csv_filename, index=False)
+    print(f"Data saved to {csv_filename}")
 
     fig1, axes1 = plt.subplots(3, 1, figsize=(10, 12), sharex=True)
     fig1.suptitle('Base Position', fontsize=16)
@@ -163,9 +228,12 @@ def load_sb3(args):
     labels_vel = ['Vx', 'Vy', 'Vz']
     
     for i in range(3):
-        axes2[i].plot(t, base_vel[i, :], linewidth=2)
+        axes2[i].plot(t, base_vel[i, :], linewidth=2, label='Base Velocity')
+        if i == 0:  # Only plot desired velocity for the x-axis
+            axes2[i].plot(t, des_vel_x_hist, linewidth=2, linestyle='--', label='Desired Velocity')
         axes2[i].set_ylabel(f'{labels_vel[i]} [m/s]')
         axes2[i].grid(True, alpha=0.3)
+        axes2[i].legend()
     axes2[2].set_xlabel('Time [s]')
     plt.tight_layout()
     plt.show()
@@ -177,6 +245,7 @@ def parse_arguments():
 
     parser.add_argument("--record_video", type=bool, default=False, help="Record video flag")
     parser.add_argument("--add_noise", action="store_true", help="Add noise flag")
+    # parser.add_argument("--add_noise", type=bool, default=False, help="")
 
     parser.add_argument("--sim_time", type=int, default=500, help="Duration of the simulation in miliseconds (has to be integer)")
 
@@ -198,6 +267,8 @@ def parse_arguments():
     parser.add_argument("--stair_height", type=float, default=0.05, help="desired h - z of the body")
     parser.add_argument("--stair_width", type=float, default=0.25, help="desired h - z of the body")
     parser.add_argument("--slope_pitch", type=float, default=0.2, help="")
+
+    parser.add_argument("--randomize_velocity_command", action="store_true", help="Whether to randomize velocity commands")
 
     parser.add_argument("--learning-alg", type=str, default="PPO", choices=["PPO", "SAC"], help="Learning algorithm to use (default: PPO)")
     parser.add_argument("--motor_control_mode", type=str, default="CPG", choices=["CPG", "PD","TORQUE", "CARTESIAN_PD"], help="Motor control mode")
