@@ -6,3 +6,4 @@ logs/
 trained_models/
 materials/
 videos/
+*.csv
