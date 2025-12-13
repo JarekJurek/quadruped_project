@@ -516,7 +516,7 @@ def parse_arguments():
     parser.add_argument("--disable_orientation", type=bool, default=False, help="")
     parser.add_argument("--disable_energy", type=bool, default=False, help="")
 
-    parser.add_argument("--add_noise", type=bool, default=True, help="")
+    parser.add_argument("--add_noise", action="store_true")
 
     parser.add_argument("--enable_vmc", action="store_true", help="Enable Virtual Model Control (VMC)")
     parser.add_argument("--k_vmc", type=float, default=250.0, help="VMC gain parameter")
