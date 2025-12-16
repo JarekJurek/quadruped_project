@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2022 Guillaume Bellegarda. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
-# 
+#
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
 #
@@ -28,7 +28,7 @@
 #
 # Copyright (c) 2022 EPFL, Guillaume Bellegarda
 
-"""This file implements the gym environment for a quadruped. """
+"""This file implements the gym environment for a quadruped."""
 
 import inspect
 import os
@@ -65,24 +65,27 @@ from hopf_network import HopfNetwork
 
 # helper functions
 def unit_vector(vector):
-	""" Returns the unit vector of the vector.  """
-	return vector / np.linalg.norm(vector)
+    """Returns the unit vector of the vector."""
+    return vector / np.linalg.norm(vector)
+
 
 def angle_between(v1, v2):
-	""" Returns the angle in radians between vectors 'v1' and 'v2' """
-	v1_u = unit_vector(v1)
-	v2_u = unit_vector(v2)
-	return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
+    """Returns the angle in radians between vectors 'v1' and 'v2'"""
+    v1_u = unit_vector(v1)
+    v2_u = unit_vector(v2)
+    return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
+
 
 def rotation_matrix(theta):
-	return np.array([ [np.cos(theta), -np.sin(theta) ], [np.sin(theta), np.cos(theta)] ])
+    return np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
+
 
 ACTION_EPS = 0.01
 OBSERVATION_EPS = 0.01
-VIDEO_LOG_DIRECTORY = 'videos/' + datetime.datetime.now().strftime("vid-%Y-%m-%d-%H-%M-%S-%f")
+VIDEO_LOG_DIRECTORY = "videos/" + datetime.datetime.now().strftime("vid-%Y-%m-%d-%H-%M-%S-%f")
 
 ##################################################################################
-#  Important details! 
+#  Important details!
 ##################################################################################
 """
 Implemented observation spaces for deep reinforcement learning: 
@@ -114,1593 +117,1620 @@ Motor control modes:
         torques are computed based on inverse kinematics + joint PD (or you can add Cartesian PD)
 """
 
-EPISODE_LENGTH = 10   # how long before we reset the environment (max episode length for RL)
-MAX_FWD_VELOCITY = 1  # to avoid exploiting simulator dynamics, cap max reward for body velocity 
+EPISODE_LENGTH = 10  # how long before we reset the environment (max episode length for RL)
+MAX_FWD_VELOCITY = 1  # to avoid exploiting simulator dynamics, cap max reward for body velocity
 
 # CPG quantities
 MU_LOW = 1
 MU_UPP = 2
 
+
 class QuadrupedGymEnv(gym.Env):
-  """The gym environment for a quadruped {Unitree A1}.
-  It simulates the locomotion of a quadrupedal robot. 
-  The state space, action space, and reward functions can be chosen with:
-  observation_space_mode, motor_control_mode, task_env.
-  """
-  def __init__(
-      self,
-      robot_config=robot_config,
-      isRLGymInterface=True,
-      time_step=0.001,
-      action_repeat=10,  
-      motor_control_mode="CPG",
-      task_env="LR_COURSE_TASK",
-      observation_space_mode="LR_COURSE_OBS",
-      on_rack=False,
-      render=False,
-      record_video=False,
-      add_noise=True,
-      terrain=None,
-      test_flagrun=False,
-      max_episode_length=10.,
-      des_vel_x=0.8,
-      des_h=0.25,
-      des_g_c=0.07,
-      randomize_cpg_params=False,
-      randomize_velocity_command=False,
-      des_vel_x_min=0.3,
-      des_vel_x_max=0.8,
-      num_stairs=1, 
-      stair_height=0.05,
-      stair_width=0.25,
-      vel_tracking_weight=1.0, 
-      drift_weight=0.5, 
-      yaw_weight=0.5,
-      orientation_weight=1.0,
-      height_weight=1.0,
-      survival_weight=1.0,
-      enable_vmc=False,
-      k_vmc=250,
-      dot_prod_min=0.85,
-      kp=None,
-      kd=None,
-      slope_pitch=0.2,
-      disable_drift=False, 
-      disable_yaw=False, 
-      disable_orientation=False,
-      disable_energy=False,
-      **kwargs): # any extra arguments from legacy
-    """Initialize the quadruped gym environment.
-    Args:
-      robot_config: The robot config file, contains A1 parameters.
-
-      isRLGymInterface: If the gym environment is being run as RL or not. Affects if the actions should be scaled.
-
-      time_step: Simulation time step.
-
-      action_repeat: The number of simulation steps where the same actions are applied.
-
-      motor_control_mode: Whether to use Torque control, PD, Cartesian control or CPG.
-
-      task_env: Task trying to learn (fwd locomotion, task specific, etc.)
-
-      observation_space_mode: what should be in here? Check available functions in quadruped.py. also consider CPG states (amplitudes/phases).
-
-      on_rack: Whether to place the quadruped on rack. This is only used to debug the walking gait. In this mode, the quadruped's base is hanged midair so
-      that its walking gait is clearer to visualize.
-
-      render: Whether to render the simulation.
-
-      record_video: Whether to record a video of each trial.
-
-      add_noise: vary coefficient of friction etc.
-
-      terrain: string indicating what kind of terrain ("STAIRS", "SLOPES", "GAPS", "RANDOM"). If you want flat terrain, just put None.
-
-      test_flagrun: follow certain goals in order, fixed coefficient of friction 
+    """The gym environment for a quadruped {Unitree A1}.
+    It simulates the locomotion of a quadrupedal robot.
+    The state space, action space, and reward functions can be chosen with:
+    observation_space_mode, motor_control_mode, task_env.
     """
-    self._robot_config = robot_config
-    self._isRLGymInterface = isRLGymInterface
-    self._time_step = time_step
-    self._action_repeat = action_repeat
-    self._motor_control_mode = motor_control_mode
-    self._TASK_ENV = task_env
-    self._observation_space_mode = observation_space_mode
-    self._hard_reset = True # must fully reset simulation at init
-    self._on_rack = on_rack
-    self._is_render = render
-    self._is_record_video = record_video
-    self._add_noise = add_noise
-    self._using_test_env = test_env
-    self._test_flagrun = test_flagrun
-    self.goal_id = None
-    self._terrain = terrain
-    self._max_episode_length = max_episode_length
-    if self._add_noise:
-      self._observation_noise_stdev = 0.01 #
-    else:
-      self._observation_noise_stdev = 0.0
 
-    self._randomize_cpg_params = randomize_cpg_params
-    self._h_min = 0.2
-    self._h_max = 0.3
-    self._g_c_min = 0.04 
-    self._g_c_max = 0.2
-    self.des_h = des_h
-    self.des_g_c = des_g_c
-
-    self.cpg_h_container = []
-    self.cpg_g_c_container = []
-
-    self.randomize_velocity_command = randomize_velocity_command
-    self._des_vel_x = des_vel_x
-    self._des_vel_x_min = des_vel_x_min
-    self._des_vel_x_max = des_vel_x_max
-    self.des_vel_x_container = []
-
-    self._vel_tracking_weight = vel_tracking_weight
-    self._drift_weight = drift_weight
-    self._yaw_weight = yaw_weight
-    self._orientation_weight = orientation_weight
-    self._height_weight = height_weight
-    self._survival_weight = survival_weight
-
-    self.disable_drift = disable_drift
-    self.disable_yaw = disable_yaw
-    self.disable_orientation = disable_orientation
-    self.disable_energy = disable_energy
-
-    self.enable_vmc = enable_vmc
-    self.k_vmc = k_vmc
-
-    self.dot_prod_min = dot_prod_min
-
-    self._sample_vel_interval = 4.0
-
-    self.num_stairs = num_stairs
-    self.stair_height = stair_height
-    self.stair_width = stair_width
-
-    self.slope_pitch = slope_pitch
-
-    self.kp = kp
-    self.kd = kd
-
-    # other bookkeeping 
-    self._num_bullet_solver_iterations = int(300 / action_repeat) 
-    self._env_step_counter = 0
-    self._sim_step_counter = 0
-    self._last_base_position = [0, 0, 0]
-    self._last_frame_time = 0.0 # for rendering 
-    self._MAX_EP_LEN = self._max_episode_length # max sim time in seconds, arbitrary
-    self._action_bound = 1.0
-
-    # if using CPG
-    self.setupCPG()
-    self.setupActionSpace()
-    self.setupObservationSpace()
-    if self._is_render:
-      self._pybullet_client = bc.BulletClient(connection_mode=pybullet.GUI)
-    else:
-      self._pybullet_client = bc.BulletClient()
-    self._configure_visualizer()
-    self.videoLogID = None
-    self.seed()
-    self.reset()
- 
-  def setupCPG(self):
-    self._cpg = HopfNetwork(use_RL=True)
-
-  ######################################################################################
-  # RL Observation and Action spaces 
-  ######################################################################################
-  def setupObservationSpace(self):
-    """Set up observation space for RL. """
-    if self._observation_space_mode == "DEFAULT":
-      observation_high = (np.concatenate((self._robot_config.UPPER_ANGLE_JOINT,
-                                         self._robot_config.VELOCITY_LIMITS,
-                                         np.array([1.0]*4))) +  OBSERVATION_EPS)
-      observation_low = (np.concatenate((self._robot_config.LOWER_ANGLE_JOINT,
-                                         -self._robot_config.VELOCITY_LIMITS,
-                                         np.array([-1.0]*4))) -  OBSERVATION_EPS)
-
-    elif self._observation_space_mode == "LR_COURSE_OBS":
-      # [TODO] Set observation upper and lower ranges. What are reasonable limits? 
-      # Note 50 is arbitrary below, you may have more or less
-      # If using CPG-RL, remember to include limits on these
-      # observation_high = (np.zeros(50) + OBSERVATION_EPS)
-      # observation_low = (np.zeros(50) -  OBSERVATION_EPS)
-
-      """
-      full observation:
-      - body orientation
-      - body linear velocity
-      - body angular velocity
-      - joint position
-      - joint velocities
-      - foot contact booleans
-      - last policy action
-      - CPG states
-        - r
-        - dr
-        - theta
-        - dtheta
-      """
-       
-      observation_high = (np.concatenate((
-        np.array([1.0] * 4), # base orientation in quaternions
-        np.array([19.] * 3), # body linear velocity
-        np.array([5.] * 3), # base angular velocity
-        self._robot_config.UPPER_ANGLE_JOINT, # joint position
-        self._robot_config.VELOCITY_LIMITS, # joint velocities
-        np.array([1.0] * 4), # foot contact booleans
-        np.array([1.0] * 8), # last policy action
-        np.array([MU_UPP] * 4), # r
-        np.array([5.0] * 4), # dr
-        np.array([np.pi] * 4), # theta
-        np.array([4.5 * 2 * np.pi] * 4), # dtheta
-      )) + OBSERVATION_EPS)
-
-      observation_low = (np.concatenate((
-        np.array([-1.0] * 4), # base orientation in quaternions
-        np.array([-19.] * 3), # body linear velocity
-        np.array([-5.0] * 3), # base angular velocity
-        self._robot_config.LOWER_ANGLE_JOINT, # joint position
-        -self._robot_config.VELOCITY_LIMITS, # joint velocities
-        np.array([0.] * 4), # foot contact booleans
-        np.array([-1.0] * 8), # last policy action
-        np.array([MU_LOW] * 4), # r
-        np.array([-5.0] * 4), # dr
-        np.array([-np.pi] * 4), # theta
-        np.array([-4.5 * 2 * np.pi] * 4), # dtheta,
-      )) + OBSERVATION_EPS)
-    
-    elif self._observation_space_mode == "LR_COURSE_OBS_EXTENDED":       
-      observation_high = (np.concatenate((
-        np.array([1.0] * 4), # base orientation in quaternions
-        np.array([19.] * 3), # body linear velocity
-        np.array([5.] * 3), # base angular velocity
-        self._robot_config.UPPER_ANGLE_JOINT, # joint position
-        self._robot_config.VELOCITY_LIMITS, # joint velocities
-        np.array([1.0] * 4), # foot contact booleans
-        np.array([1.0] * 8), # last policy action
-        np.array([MU_UPP] * 4), # r
-        np.array([5.0] * 4), # dr
-        np.array([np.pi] * 4), # theta
-        np.array([4.5 * 2 * np.pi] * 4), # dtheta
-        np.array([self._des_vel_x_max]), # desired x velocity
-      )) + OBSERVATION_EPS)
-
-      observation_low = (np.concatenate((
-        np.array([-1.0] * 4), # base orientation in quaternions
-        np.array([-19.] * 3), # body linear velocity
-        np.array([-5.0] * 3), # base angular velocity
-        self._robot_config.LOWER_ANGLE_JOINT, # joint position
-        -self._robot_config.VELOCITY_LIMITS, # joint velocities
-        np.array([0.] * 4), # foot contact booleans
-        np.array([-1.0] * 8), # last policy action
-        np.array([MU_LOW] * 4), # r
-        np.array([-5.0] * 4), # dr
-        np.array([-np.pi] * 4), # theta
-        np.array([-4.5 * 2 * np.pi] * 4), # dtheta,
-        np.array([self._des_vel_x_min]), # desired x velocity
-      )) + OBSERVATION_EPS)
-    
-    else:
-      raise ValueError("observation space not defined or not intended")
-
-    self.observation_space = spaces.Box(observation_low, observation_high, dtype=np.float32)
-
-  def setupActionSpace(self):
-    """ Set up action space for RL. """
-    if self._motor_control_mode in ["PD","TORQUE", "CARTESIAN_PD"]:
-      action_dim = 12
-    elif self._motor_control_mode in ["CPG"]:
-      action_dim = 8
-      # for simplicity we can disable coupling (remove phi)
-    else:
-      raise ValueError("motor control mode " + self._motor_control_mode + " not implemented yet.")
-    action_high = np.array([1] * action_dim)
-    self.action_space = spaces.Box(-action_high, action_high, dtype=np.float32)
-    self._action_dim = action_dim
-
-  def _get_observation(self):
-    """Get observation, depending on obs space selected. """
-    if self._observation_space_mode == "DEFAULT":
-      self._observation = np.concatenate((self.robot.GetMotorAngles(), 
-                                          self.robot.GetMotorVelocities(),
-                                          self.robot.GetBaseOrientation() ))
-    elif self._observation_space_mode == "LR_COURSE_OBS":
-      # [TODO] Get observation from robot. What are reasonable measurements we could get on hardware?
-      # if using the CPG, you can include states with self._cpg.get_r(), for example
-      # 50 is arbitrary
-
-      # WE CAN ADD FOOT CONTACT BOOLEANS AND CPG STATES AS ANOTHER OBSERVATION
-
-      """
-      full observation:
-      - body orientation
-      - body linear velocity
-      - body angular velocity
-      - joint position
-      - joint velocities
-      - foot contact booleans
-      - last policy action
-      - CPG states
-        - r
-        - dr
-        - theta
-        - dtheta
-      """
-
-      self._observation = np.concatenate((self.robot.GetBaseOrientation(),
-                                          self.robot.GetBaseLinearVelocity(),
-                                          self.robot.GetBaseAngularVelocity(),
-                                          self.robot.GetMotorAngles(),
-                                          self.robot.GetMotorVelocities(),
-                                          np.array(self.robot.GetContactInfo()[3]),
-                                          self._last_action,
-                                          self._cpg.get_r(), 
-                                          self._cpg.get_dr(),
-                                          self._cpg.get_theta(),
-                                          self._cpg.get_dtheta(),))
-      expected_size = self.observation_space.shape[0]
-      if self._observation.shape[0] != expected_size:
-        raise ValueError(f"Observation shape mismatch: got {self._observation.shape[0]}, expected {expected_size}")
-    elif self._observation_space_mode == "LR_COURSE_OBS_EXTENDED":
-      # [TODO] Get observation from robot. What are reasonable measurements we could get on hardware?
-      # if using the CPG, you can include states with self._cpg.get_r(), for example
-      # 50 is arbitrary
-
-      # WE CAN ADD FOOT CONTACT BOOLEANS AND CPG STATES AS ANOTHER OBSERVATION
-
-      """
-      full observation:
-      - body orientation
-      - body linear velocity
-      - body angular velocity
-      - joint position
-      - joint velocities
-      - foot contact booleans
-      - last policy action
-      - CPG states
-        - r
-        - dr
-        - theta
-        - dtheta
-      """
-
-      self._observation = np.concatenate((self.robot.GetBaseOrientation(),
-                                          self.robot.GetBaseLinearVelocity(),
-                                          self.robot.GetBaseAngularVelocity(),
-                                          self.robot.GetMotorAngles(),
-                                          self.robot.GetMotorVelocities(),
-                                          np.array(self.robot.GetContactInfo()[3]),
-                                          self._last_action,
-                                          self._cpg.get_r(), 
-                                          self._cpg.get_dr(),
-                                          self._cpg.get_theta(),
-                                          self._cpg.get_dtheta(),
-                                          np.array([self._des_vel_x])))
-      expected_size = self.observation_space.shape[0]
-      if self._observation.shape[0] != expected_size:
-        raise ValueError(f"Observation shape mismatch: got {self._observation.shape[0]}, expected {expected_size}")
-    else:
-      raise ValueError("observation space not defined or not intended")
-
-    self._add_obs_noise = (np.random.normal(scale=self._observation_noise_stdev, size=self._observation.shape) *
-          self.observation_space.high)
-    return self._observation
-
-  def _noisy_observation(self):
-    self._get_observation()
-    observation = np.array(self._observation)
-    if self._observation_noise_stdev > 0:
-      observation += self._add_obs_noise
-    return observation
-
-  def _get_info(self) -> dict:
-    return {'base_pos': self.robot.GetBasePosition()} 
-
-  ######################################################################################
-  # Termination and reward
-  ######################################################################################
-  def is_fallen(self,dot_prod_min=0.85):
-    """Decide whether the quadruped has fallen.
-
-    If the up directions between the base and the world is larger (the dot
-    product is smaller than 0.85) or the base is very low on the ground
-    (the height is smaller than 0.13 meter), the quadruped is considered fallen.
-
-    Returns:
-      Boolean value that indicates whether the quadruped has fallen.
-    """
-    base_rpy = self.robot.GetBaseOrientationRollPitchYaw()
-    orientation = self.robot.GetBaseOrientation()
-    rot_mat = self._pybullet_client.getMatrixFromQuaternion(orientation)
-    local_up = rot_mat[6:]
-    pos = self.robot.GetBasePosition()
-    return (np.dot(np.asarray([0, 0, 1]), np.asarray(local_up)) < dot_prod_min or pos[2] < self._robot_config.IS_FALLEN_HEIGHT)
-
-  def _termination(self):
-    """Decide whether we should stop the episode and reset the environment. """
-    return self.is_fallen(dot_prod_min=self.dot_prod_min) 
-
-  def _reward_fwd_locomotion(self, des_vel_x=None):
-    """Learn forward locomotion at a desired velocity. """
-    vel_tracking_reward = 0.1 * np.clip(self.robot.GetBaseLinearVelocity()[0], 0.2, 1.0)
-    # If you want to track a desired velocity 
-    if des_vel_x is not None:
-      # what about using velocity in the body frame?
-      vel_tracking_reward = 0.05 * np.exp( -1/ 0.25 *  (self.robot.GetBaseLinearVelocity()[0] - des_vel_x)**2 )
-    
-    # minimize yaw (go straight)
-    yaw_reward = -0.2 * np.abs(self.robot.GetBaseOrientationRollPitchYaw()[2]) 
-    
-    # don't drift laterally 
-    drift_reward = -0.01 * abs(self.robot.GetBasePosition()[1]) 
-    
-    # minimize energy 
-    energy_reward = 0 
-
-    for tau,vel in zip(self._dt_motor_torques,self._dt_motor_velocities):
-      energy_reward += np.abs(np.dot(tau,vel)) * self._time_step
-
-    reward = vel_tracking_reward \
-            + yaw_reward \
-            + drift_reward \
-            - 0.01 * energy_reward \
-            - 0.1 * np.linalg.norm(self.robot.GetBaseOrientation() - np.array([0,0,0,1]))
-
-    return max(reward,0) # keep rewards positive
-  
-  def _reward_fwd_locomotion_custom(self, 
-                                    des_vel_x=None, 
-                                    vel_tracking_weight=1.0, 
-                                    drift_weight=0.5, 
-                                    yaw_weight=0.5,
-                                    orientation_weight=1.0,
-                                    height_weight=1.0,
-                                    survival_weight=1.0):
-    """Learn forward locomotion at a desired velocity."""
-    
-    # Velocity tracking reward
-    actual_vel_x = self.robot.GetBaseLinearVelocity()[0]
-    if des_vel_x is not None:
-        # Exponential reward for velocity tracking
-        vel_tracking_reward = vel_tracking_weight * np.exp(-((actual_vel_x - des_vel_x)**2) / 0.25)
-    else:
-        # Reward forward velocity with saturation
-        vel_tracking_reward = vel_tracking_weight * np.clip(actual_vel_x, 0.0, 1.0)
-
-    vel_sq_error = (des_vel_x - self.robot.GetBaseLinearVelocity()[0])**2 + \
-                   (0.0 - self.robot.GetBaseLinearVelocity()[1])**2
-    vel_tracking_reward = np.exp(-vel_sq_error / 0.25)
-    
-    # Penalize lateral drift
-    lateral_vel = self.robot.GetBaseLinearVelocity()[1]
-    drift_reward = -drift_weight * lateral_vel**2
-    drift_reward = -drift_weight * np.exp(-((lateral_vel - 0.0)**2) / 0.25)
-    
-    # Penalize yaw deviation (go straight)
-    yaw = self.robot.GetBaseOrientationRollPitchYaw()[2]
-    yaw_reward = -yaw_weight * yaw**2
-    
-    # Penalize roll and pitch to maintain upright posture
-    roll, pitch, _ = self.robot.GetBaseOrientationRollPitchYaw()
-    orientation_penalty = -orientation_weight * (roll**2 + pitch**2)
-
-    base_angular_velocity = self.robot.GetTrueBaseRollPitchYawRate()
-    orientation_penalty = -orientation_weight * np.linalg.norm(base_angular_velocity[:2])**2
-    
-    # Energy penalty (instantaneous power, not accumulated)
-    if self._dt_motor_torques and self._dt_motor_velocities:
-        # Use only the most recent timestep
-        instantaneous_power = np.abs(np.dot(self._dt_motor_torques[-1], 
-                                            self._dt_motor_velocities[-1]))
-        energy_reward = -0.001 * instantaneous_power
-    else:
-        energy_reward = 0.0
-    
-    # Penalize vertical velocity (should stay at constant height)
-    vertical_vel = self.robot.GetBaseLinearVelocity()[2]
-    height_reward = -height_weight * vertical_vel**2
-
-    survival_reward = 1.0 * survival_weight
-    
-    # Total reward
-    reward = vel_tracking_reward \
-            + drift_reward \
-            + yaw_reward \
-            + orientation_penalty \
-            + energy_reward \
-            + height_reward \
-            + survival_reward
-    
-    return reward
-
-  def _reward_fwd_locomotion_custom_old(self, 
-                                        des_vel_x=None, 
-                                        disable_drift=False, 
-                                        disable_yaw=False, 
-                                        disable_orientation=False,
-                                        disable_energy=False):
-    """Learn forward locomotion at a desired velocity."""
-    
-    # Velocity tracking reward
-    actual_vel_x = self.robot.GetBaseLinearVelocity()[0]
-    if des_vel_x is not None:
-        # Exponential reward for velocity tracking
-        vel_tracking_reward = 1.0 * np.exp(-((actual_vel_x - des_vel_x)**2) / 0.25)
-    else:
-        # Reward forward velocity with saturation
-        vel_tracking_reward = 1.0 * np.clip(actual_vel_x, 0.0, 1.0)
-    
-    # Penalize lateral drift
-    drift_reward = 0.0
-    lateral_vel = self.robot.GetBaseLinearVelocity()[1]
-    if not disable_drift:
-      drift_reward = -0.5 * lateral_vel**2
-    
-    # Penalize yaw deviation (go straight)
-    yaw = self.robot.GetBaseOrientationRollPitchYaw()[2]
-    yaw_reward = 0.0
-    if not disable_yaw:
-      yaw_reward = -0.5 * yaw**2
-    
-    # Penalize roll and pitch to maintain upright posture
-    roll, pitch, _ = self.robot.GetBaseOrientationRollPitchYaw()
-    orientation_reward = 0.0
-    if not disable_orientation:
-      orientation_reward = -1.0 * (roll**2 + pitch**2)
-    
-    # Energy penalty (instantaneous power, not accumulated)
-    if self._dt_motor_torques and self._dt_motor_velocities and not disable_energy:
-        # Use only the most recent timestep
-        instantaneous_power = np.abs(np.dot(self._dt_motor_torques[-1], 
-                                            self._dt_motor_velocities[-1]))
-        energy_reward = -0.001 * instantaneous_power
-    else:
-        energy_reward = 0.0
-    
-    # Penalize vertical velocity (should stay at constant height)
-    vertical_vel = self.robot.GetBaseLinearVelocity()[2]
-    height_reward = -1.0 * vertical_vel**2
-    
-    # Total reward
-    reward = vel_tracking_reward \
-            + drift_reward \
-            + yaw_reward \
-            + orientation_reward \
-            + energy_reward \
-            + height_reward
-    
-    return reward
-
-  def _reward_fwd_locomotion_basic(self):
-    """ Reward progress in the positive world x direction.  """
-    current_base_position = self.robot.GetBasePosition()
-    forward_reward = current_base_position[0] - self._last_base_position[0]
-    self._last_base_position = current_base_position
-    # clip reward to MAX_FWD_VELOCITY (avoid exploiting simulator dynamics)
-    if MAX_FWD_VELOCITY < np.inf:
-      # calculate what max distance can be over last time interval based on max allowed fwd velocity
-      max_dist = MAX_FWD_VELOCITY * (self._time_step * self._action_repeat)
-      forward_reward = min( forward_reward, max_dist)
-
-    return 2.0 * forward_reward
-
-  def get_distance_and_angle_to_goal(self):
-    """ Helper to return distance and angle to current goal location. """
-    # current object location
-    base_pos = self.robot.GetBasePosition()
-    yaw = self.robot.GetBaseOrientationRollPitchYaw()[2]
-    goal_vec = self._goal_location
-    dist_to_goal = np.linalg.norm(base_pos[0:2]-goal_vec)
-
-    # angle to goal (from current heading)
-    body_dir_vec = np.matmul( rotation_matrix(yaw), np.array([[1],[0]]) )
-    body_goal_vec = goal_vec - base_pos[0:2]
-    body_dir_vec = body_dir_vec.reshape(2,)
-    body_goal_vec = body_goal_vec.reshape(2,)
-
-    Vn = unit_vector( np.array([0,0,1]) )
-    c = np.cross( np.hstack([body_dir_vec,0]), np.hstack([body_goal_vec,0])  )
-    angle = angle_between(body_dir_vec, body_goal_vec)
-    angle = angle * np.sign( np.dot( Vn , c ) )
-
-    return dist_to_goal, angle
-  
-  def _reward_flag_run(self):
-    """ Learn to move towards goal location. """
-    curr_dist_to_goal, angle = self.get_distance_and_angle_to_goal()
-
-    # minimize distance to goal (we want to move towards the goal)
-    dist_reward = 10 * ( self._prev_pos_to_goal - curr_dist_to_goal)
-    
-    # minimize yaw deviation to goal (necessary?)
-    yaw_reward = 0 # -0.01 * np.abs(angle) 
-
-    # minimize energy 
-    energy_reward = 0 
-    for tau,vel in zip(self._dt_motor_torques,self._dt_motor_velocities):
-      energy_reward += np.abs(np.dot(tau,vel)) * self._time_step
-
-    reward = dist_reward \
-            + yaw_reward \
-            - 0.001 * energy_reward 
-    
-    return max(reward,0) # keep rewards positive
-    
-  def _reward_lr_course(self, des_vel_x=None, des_vel_y=0., des_yaw_rate=0.):
-    """ Implement your reward function here. How will you improve upon the above? """
-    # [TODO] add your reward function. 
-    
-    # vel_tracking_reward = 0.1 * np.clip(self.robot.GetBaseLinearVelocity()[0], 0.2, 1.0)
-    # # If you want to track a desired velocity 
-    # if des_vel_x is not None:
-    #   # what about using velocity in the body frame?
-    #   vel_tracking_reward = 0.05 * np.exp( -1/ 0.25 *  (self.robot.GetBaseLinearVelocity()[0] - des_vel_x)**2 )
-
-    def calculate_reward(des_value, measured_value):
-      return np.exp(-1 / 0.25 * (np.linalg.norm(des_value - measured_value))**2)
-    
-
-    x_vel_reward = calculate_reward(des_vel_x, self.robot.GetBaseLinearVelocity()[0])
-
-    y_vel_reward = calculate_reward(des_vel_y, self.robot.GetBaseLinearVelocity()[1])
-
-    angular_velocity_tracking = calculate_reward(des_yaw_rate, self.robot.GetTrueBaseRollPitchYawRate()[2])
-
-    z_vel_penalty = - self.robot.GetBaseLinearVelocity()[2] ** 2
-
-    base_angular_velocity = self.robot.GetTrueBaseRollPitchYawRate()
-    omega_xy = base_angular_velocity[:2]  # Extract roll rate and pitch rate (x and y components)
-    angular_velocity_penalty = -np.linalg.norm(omega_xy)**2
-    
-    work_penalty = 0
-    if hasattr(self, '_prev_motor_velocities'):
-        dq_diff = np.array(self._dt_motor_velocities[-1]) - np.array(self._prev_motor_velocities)
-        work_penalty = np.abs(np.dot(self._dt_motor_torques[-1], dq_diff))
-    self._prev_motor_velocities = self._dt_motor_velocities[-1].copy() if self._dt_motor_velocities else np.zeros(12)
-
-    # reward = 0.75 * self._time_step * x_vel_reward \
-    #         + 0.75 * self._time_step * y_vel_reward \
-    #         + 0.5 * self._time_step * angular_velocity_tracking \
-    #         + 2. * self._time_step * z_vel_penalty \
-    #         + 0.05 * self._time_step * angular_velocity_penalty \
-    #         + 0.001 * self._time_step * work_penalty \
-    reward = 0.75 * self._time_step * x_vel_reward \
-      + 0.75 * self._time_step * y_vel_reward \
-      + 2. * self._time_step * z_vel_penalty \
-      + 0.001 * self._time_step * work_penalty \
-
-    return max(reward,0) # keep rewards positive
-  
-  def _reward_eth(self, des_vel_x=0.8, des_vel_y=0., des_yaw_rate=0.):
-    # 1. Linear Velocity Tracking (Corrected to Vector Norm)
-    # Source [548]: phi(v*_xy - v_xy)
-    vel_sq_error = (des_vel_x - self.robot.GetBaseLinearVelocity()[0])**2 + \
-                   (des_vel_y - self.robot.GetBaseLinearVelocity()[1])**2
-    lin_vel_reward = np.exp(-vel_sq_error / 0.25)
-
-    # 2. Angular Velocity Tracking
-    # Source [548]: phi(omega*_z - omega_z)
-    ang_vel_error = (des_yaw_rate - self.robot.GetTrueBaseRollPitchYawRate()[2])**2
-    ang_vel_reward = np.exp(-ang_vel_error / 0.25)
-
-    # 3. Linear Velocity Penalty (z-axis)
-    # Source [548]: -v_{b,z}^2
-    linear_vel_penalty = -self.robot.GetBaseLinearVelocity()[2]**2
-
-    # 4. Angular Velocity Penalty (xy-axes)
-    # Source [548]: -||omega_xy||^2
-    base_angular_velocity = self.robot.GetTrueBaseRollPitchYawRate()
-    angular_velocity_penalty = -np.linalg.norm(base_angular_velocity[:2])**2
-
-    # 5. Joint Motion (Minimize Accel and Vel)
-    # Source [548]: -||q_dot||^2 - ||q_ddot||^2 (inferred from table grouping)
-    dq = np.array(self._dt_motor_velocities[-1])
-    ddq = np.array(self._dt_motor_accelerations[-1])
-    joint_motion = -np.linalg.norm(ddq)**2 - np.linalg.norm(dq)**2
-
-    # 6. Joint Torques
-    # Source [548]: -||tau||^2
-    torques = np.array(self._dt_motor_torques[-1])
-    joint_torques = -np.linalg.norm(torques)**2
-
-    # 7. Action Rate (Smoothness)
-    # Source [548]: -||a_t - a_{t-1}||^2
-    # Ensure you implemented the _prev_action_for_reward logic in step()
-    if hasattr(self, '_prev_action_for_reward'):
-        action_diff = self._last_action - self._prev_action_for_reward
-        action_rate = -np.linalg.norm(action_diff)**2
-    else:
-        action_rate = 0.0
-
-    # Weights from Table 2 
-    # Note: lin_vel_reward combines x and y, so we apply the 1.0dt weight once to the vector term.
-    reward = 1.0 * self._time_step * lin_vel_reward \
-           + 0.5 * self._time_step * ang_vel_reward \
-           + 4.0 * self._time_step * linear_vel_penalty \
-           + 0.05 * self._time_step * angular_velocity_penalty \
-           + 0.001 * self._time_step * joint_motion \
-           + 0.00002 * self._time_step * joint_torques \
-           + 0.25 * self._time_step * action_rate 
-           
-    return reward
-
-  def _reward_cpg_rl(self, 
-                   des_vel_x=None,
-                   des_vel_y=0.0,
-                   des_yaw_rate=0.0):
-    """
-    Reward function strictly following CPG-RL Paper (Bellegarda et al.).
-    Reference: Section III-C, Page 4.
-    """
-    
-    # --- Constants & Weights (from Paper Source 185) ---
-    # The paper lists weights multiplied by dt (0.01). 
-    # We use the raw coefficients for per-step reward calculation.
-    w_vel_x    = 0.75
-    w_vel_y    = 0.75
-    w_yaw      = 0.5
-    w_z_pen    = 2.0     # Penalty for vertical bounce
-    w_ang_pen  = 0.05    # Penalty for roll/pitch rates
-    w_work_pen = 0.001   # Penalty for energy/work
-    
-    # Gaussian Kernel: f(x) = exp(-x^2 / 0.25) [Source 185]
-    def gaussian(error, sigma_sq=0.25):
-        return np.exp(-(error**2) / sigma_sq)
-
-    # --- 1. Velocity Tracking (Body X) [Positive Reward] ---
-    # "linear velocity tracking, body x direction" [Source 183]
-    actual_vel_x = self.robot.GetBaseLinearVelocity()[0]
-    if des_vel_x is not None:
-        r_vel_x = w_vel_x * gaussian(actual_vel_x - des_vel_x)
-    else:
-        # If no command, track 0 or maintain current (paper implies tracking logic)
-        r_vel_x = w_vel_x * gaussian(actual_vel_x - 0.0)
-
-    # --- 2. Drift Tracking (Body Y) [Positive Reward] ---
-    # "linear velocity tracking, body y direction" [Source 183]
-    # Rewards keeping lateral velocity near 0.
-    actual_vel_y = self.robot.GetBaseLinearVelocity()[1]
-    r_vel_y = w_vel_y * gaussian(actual_vel_y - des_vel_y)
-
-    # --- 3. Yaw Rate Tracking [Positive Reward] ---
-    # "angular velocity tracking (body yaw rate)" [Source 183]
-    actual_yaw_rate = self.robot.GetBaseAngularVelocity()[2]
-    r_yaw = w_yaw * gaussian(actual_yaw_rate - des_yaw_rate)
-
-    # --- 4. Vertical Velocity Penalty [Negative] ---
-    # "linear velocity penalty in body z direction" [Source 183]
-    # Penalizes bouncing.
-    actual_vel_z = self.robot.GetBaseLinearVelocity()[2]
-    r_z = -w_z_pen * (actual_vel_z**2)
-
-    # --- 5. Angular Rate Penalty (Roll/Pitch) [Negative] ---
-    # "angular velocity penalty... -||w_b,xy||^2" [Source 183]
-    # Note: Penalizes RATES (wobble), not POSITION (tilt). 
-    # This prevents the "stiff robot" problem.
-    ang_vel = self.robot.GetBaseAngularVelocity()
-    w_xy_sq = ang_vel[0]**2 + ang_vel[1]**2
-    r_ang_stab = -w_ang_pen * w_xy_sq
-
-    # --- 6. Work/Energy Penalty [Negative] ---
-    # "work ... -|tau * q_dot|" [Source 184]
-    # Using dot product for instantaneous power
-    if self._dt_motor_torques and self._dt_motor_velocities:
-        power = np.abs(np.dot(self._dt_motor_torques[-1], 
-                              self._dt_motor_velocities[-1]))
-        r_work = -w_work_pen * power
-    else:
-        r_work = 0.0
-
-    # --- Summation ---
-    # Because r_vel_y and r_yaw are positive Gaussian terms, 
-    # the robot gets ~1.25 reward just for standing still. 
-    # This acts as the "Implicit Survival Bonus".
-    reward = r_vel_x + r_vel_y + r_yaw + r_z + r_ang_stab + r_work
-    
-    # Optional: Explicit Survival Bonus
-    # Uncomment if your robot still terminates early during the first 100 iterations.
-    # reward += 1.0 
-    
-    return reward
-
-  def _reward(self):
-    """ Get reward depending on task"""
-    if self._TASK_ENV == "FWD_LOCOMOTION":
-      return self._reward_fwd_locomotion(des_vel_x=self._des_vel_x)
-    elif self._TASK_ENV == "FWD_CUSTOM":
-      return self._reward_fwd_locomotion_custom(des_vel_x=self._des_vel_x,
-                                                vel_tracking_weight=self._vel_tracking_weight,
-                                                drift_weight=self._drift_weight,
-                                                yaw_weight=self._yaw_weight,
-                                                orientation_weight=self._orientation_weight,
-                                                height_weight=self._height_weight,
-                                                survival_weight=self._survival_weight)
-    elif self._TASK_ENV == "FWD_CUSTOM_OLD":
-      return self._reward_fwd_locomotion_custom_old(des_vel_x=self._des_vel_x, 
-                                                    disable_drift=self.disable_drift, 
-                                                    disable_yaw=self.disable_yaw, 
-                                                    disable_orientation=self.disable_orientation,
-                                                    disable_energy=self.disable_energy)
-    elif self._TASK_ENV == "FWD_BASIC":
-      return self._reward_fwd_locomotion_basic()
-    elif self._TASK_ENV == "LR_COURSE_TASK":
-      return self._reward_lr_course(des_vel_x=self._des_vel_x)
-    elif self._TASK_ENV == "ETH":
-      return self._reward_eth(des_vel_x=self._des_vel_x)
-    elif self._TASK_ENV == "CPG_RL":
-      return self._reward_cpg_rl(des_vel_x=self._des_vel_x)
-    elif self._TASK_ENV == "FLAGRUN":
-      return self._reward_flag_run()
-    else:
-      raise ValueError("This task mode not implemented yet.")
-
-  ######################################################################################
-  # Step simulation, map policy network actions to joint commands, etc. 
-  ######################################################################################
-  def _transform_action_to_motor_command(self, action):
-    """ Map actions from RL (i.e. in [-1,1]) to joint commands based on motor_control_mode. """
-    # clip actions to action bounds
-    action = np.clip(action, -self._action_bound - ACTION_EPS,self._action_bound + ACTION_EPS)
-    
-    if self._motor_control_mode == "PD":
-      action = self._scale_helper(action, self._robot_config.LOWER_ANGLE_JOINT, self._robot_config.UPPER_ANGLE_JOINT)
-      action = np.clip(action, self._robot_config.LOWER_ANGLE_JOINT, self._robot_config.UPPER_ANGLE_JOINT)
-    elif self._motor_control_mode == "CARTESIAN_PD":
-      action = self.ScaleActionToCartesianPos(action)
-    elif self._motor_control_mode == "CPG":
-      action = self.ScaleActionToCPGStateModulations(action)
-    else:
-      raise ValueError("RL motor control mode" + self._motor_control_mode + "not implemented yet.")
-    
-    return action
-
-  def _scale_helper(self, action, lower_lim, upper_lim):
-    """Helper to linearly scale from [-1,1] to lower/upper limits. """
-    new_a = lower_lim + 0.5 * (action + 1) * (upper_lim - lower_lim)
-    
-    return np.clip(new_a, lower_lim, upper_lim)
-
-  def ScaleActionToCartesianPos(self,actions):
-    """Scale RL action to Cartesian PD ranges. 
-    Edit ranges, limits etc., but make sure to use Cartesian PD to compute the torques. 
-    """
-    # clip RL actions to be between -1 and 1 (standard RL technique)
-    u = np.clip(actions,-1,1)
-    
-    # scale to corresponding desired foot positions (i.e. ranges in x,y,z we allow the agent to choose foot positions)
-    # [TODO: edit (do you think these should these be increased? How limiting is this?)]
-    scale_array = np.array([0.1, 0.05, 0.08]*4)
-    
-    # add to nominal foot position in leg frame (what are the final ranges?)
-    des_foot_pos = self._robot_config.NOMINAL_FOOT_POS_LEG_FRAME + scale_array*u
-
-    # get Cartesian kp and kd gains (can be modified)
-    kpCartesian = self._robot_config.kpCartesian
-    kdCartesian = self._robot_config.kdCartesian
-    
-    # get current motor velocities
-    dq = self.robot.GetMotorVelocities()
-
-    action = np.zeros(12)
-    for i in range(4):
-      # get Jacobian and foot position in leg frame for leg i (see ComputeJacobianAndPosition() in quadruped.py)
-      # [TODO]
-      J, pos_leg_frame = self.env.robot.ComputeJacobianAndPosition(i)
-      
-      # desired foot position i (from RL above)
-      pd = np.zeros(3) # [TODO]
-      pd = des_foot_pos[3*i : 3*i+3]
-      
-      # desired foot velocity i
-      vd = np.zeros(3) # [TODO]
-      
-      # foot velocity in leg frame i (Equation 2)
-      # [TODO]
-      foot_lin_vel_leg_frame = J @ dq[3*i:3*i+3]
-      
-      # calculate torques with Cartesian PD (Equation 5) [Make sure you are using matrix multiplications]
-      tau = np.zeros(3) # [TODO]
-      tau += J.T @ (kpCartesian @ (pd - pos_leg_frame) + kdCartesian @ (vd - foot_lin_vel_leg_frame))
-
-      action[3*i:3*i+3] = tau
-
-    return action
-
-  def ScaleActionToCPGStateModulations(self,actions):
-    """Scale RL action to CPG modulation parameters."""
-    # clip RL actions to be between -1 and 1 (standard RL technique)
-    u = np.clip(actions,-1,1)
-
-    # scale omega to ranges, and set in CPG (range is an example)
-    omega = self._scale_helper( u[0:4], 5, 4.5*2*np.pi)
-    self._cpg.set_omega_rl(omega)
-
-    # scale mu to ranges, and set in CPG (squared since we converge to the sqrt in the CPG amplitude)
-    mus = self._scale_helper( u[4:8], MU_LOW**2, MU_UPP**2)
-    self._cpg.set_mu_rl(mus)
-
-    # integrate CPG, get mapping to foot positions
-    xs,zs = self._cpg.update()
-
-    # IK parameters
-    foot_y = self._robot_config.HIP_LINK_LENGTH
-    sideSign = np.array([-1, 1, -1, 1]) # get correct hip sign (body right is negative)
-    
-    # get motor kp and kd gains (can be modified)
-    # kp = self._robot_config.MOTOR_KP # careful of size!
-    # kd = self._robot_config.MOTOR_KD -----> have not correct size, therefore i added kp and kd ad diag arrays, which are sourced directly from the robot_config down below
-    
-    # get current motor velocities
-    q = self.robot.GetMotorAngles()
-    dq = self.robot.GetMotorVelocities()
-
-    action = np.zeros(12)
-    # loop through each leg
-    for i in range(4):
-      # get desired foot i pos (xi, yi, zi)
-      x = xs[i]
-      y = sideSign[i] * foot_y # careful of sign
-      z = zs[i]
-
-      # call inverse kinematics to get corresponding joint angles
-      q_des = np.zeros(3) # [TODO]
-      q_des = self.robot.ComputeInverseKinematics(i, [x, y, z])
-
-      if self.kp is not None:
-        kp = np.diag([self.kp, self.kp, self.kp])
-      else:
-        kp = robot_config.kp
-
-      if self.kd is not None:
-        kd = np.diag([self.kd, self.kd, self.kd])
-      else:
-        kd = robot_config.kd
-      
-      # Add joint PD contribution to tau
-      tau = np.zeros(3) # [TODO]
-      tau += kp @ (q_des - q[3*i:3*i+3]) + kd @ (-dq[3*i:3*i+3])
-
-      # add Cartesian PD contribution (as you wish)
-      # _, des_xyz_leg_pos = self.robot.ComputeJacobianAndPosition(legID=i, specific_q=q_des)
-      # J, pos_leg_frame = self.robot.ComputeJacobianAndPosition(i)
-      # foot_lin_vel_leg_frame = J @ dq[3*i:3*i+3]
-      # tau += J.T @ (robot_config.kpCartesian @ (des_xyz_leg_pos - pos_leg_frame) + robot_config.kdCartesian @ (-foot_lin_vel_leg_frame))
-      
-      if self.enable_vmc:
-        J, _ = self.robot.ComputeJacobianAndPosition(i)
-        orientation_matrix = self.robot.GetBaseOrientationMatrix()
-        P = orientation_matrix @ np.array([[1.0, 1.0, -1.0, -1.0], [-1.0, 1.0, -1.0, 1.0], [0.0, 0.0, 0.0, 0.0]])
-
-        # TODO: compute virtual model torques for leg_id
-        F_vmc = np.zeros((2, 4))
-        F_vmc = np.append(F_vmc, self.k_vmc * (np.array([[0, 0, 1]]) @ P), axis=0)
-        tau_i = np.zeros(3)
-        tau_i += J.T @ F_vmc[:, i]
-
-        tau += tau_i
-
-      action[3*i:3*i+3] = tau
-
-    return action
-
-  # def virtual_model(self) -> np.ndarray:
-  #   # All motor torques are in a single array
-  #   tau = np.zeros(3 * 4)
-  #   for leg_id in range(4):
-  #       J, ee_pos_legFrame = self.simulator.get_jacobian_and_position(leg_id)
-  #       orientation_matrix = self.simulator.get_base_orientation_matrix()
-  #       P = orientation_matrix @ np.array([[1.0, 1.0, -1.0, -1.0], [-1.0, 1.0, -1.0, 1.0], [0.0, 0.0, 0.0, 0.0]])
-
-  #       # TODO: compute virtual model torques for leg_id
-  #       F_vmc = np.zeros((2, 4))
-  #       F_vmc = np.append(F_vmc, self.k_vmc * (np.array([[0, 0, 1]]) @ P), axis=0)
-  #       tau_i = np.zeros(3)
-  #       tau_i += J.T @ F_vmc[:, leg_id]
-
-  #       # Store in torques array
-  #       tau[leg_id * 3 : leg_id * 3 + 3] = tau_i
-
-  #   return tau
-
-  def step(self, action):
-    """ Step forward the simulation, given the action. """
-    curr_act = action.copy()
-    if not hasattr(self, '_prev_action_for_reward'):
-        self._prev_action_for_reward = np.zeros_like(curr_act)
-    # save motor torques and velocities to compute power in reward function
-    self._dt_motor_torques = []
-    self._dt_motor_velocities = []
-    self._dt_motor_accelerations = []
-
-    self.robot.UpdateMotorAccelerations(current_time=self.get_sim_time())
-    
-    if "FLAGRUN" in self._TASK_ENV:
-      self._prev_pos_to_goal, _ = self.get_distance_and_angle_to_goal()
-    
-    for _ in range(self._action_repeat):
-      if self._isRLGymInterface: 
-        proc_action = self._transform_action_to_motor_command(curr_act)
-      else:
-        proc_action = curr_act 
-      
-      self.robot.ApplyAction(proc_action)
-      self._pybullet_client.stepSimulation()
-      self._sim_step_counter += 1
-      self._dt_motor_torques.append(self.robot.GetMotorTorques())
-      self._dt_motor_velocities.append(self.robot.GetMotorVelocities())
-      self._dt_motor_accelerations.append(self.robot.GetMotorAccelerations())
-
-      if self._is_render:
-        self._render_step_helper()
-
-    if self.get_sim_time() % self._sample_vel_interval < self._time_step * self._action_repeat and self.randomize_velocity_command:
-      self.sample_vel_command()
-
-    self._last_action = curr_act
-    self._env_step_counter += 1
-    reward = self._reward()
-    truncated = False
-    
-    if (self.get_sim_time() > self._MAX_EP_LEN and not self._test_flagrun ):
-      truncated = True
-
-    if "FLAGRUN" in self._TASK_ENV:
-      dist_to_goal, _ = self.get_distance_and_angle_to_goal()
-      
-      if dist_to_goal < 0.5:
-        self._reset_goal()
-
-    return np.array(self._noisy_observation()), reward, self._termination(), truncated, self._get_info()
-
-  ######################################################################################
-  # Reset
-  ######################################################################################
-  def reset(self, seed: Optional[float] = None):
-    """ Set up simulation environment. """
-    mu_min = 0.5
-
-    # Update seed
-    self.seed(seed)
-
-    self._last_action = np.zeros(self._action_dim)
-
-    if hasattr(self, '_cpg'):
-      self._cpg.X = np.zeros((2,4))
-      self._cpg.X[0,:] = 0.1
-      self._cpg.X[1,:] = self._cpg.PHI[0,:]
-
-      # Force CPG to update and ensure states are initialized
-      self._cpg.update()
-
-    # Randomize CPG parameters for domain randomization
-    if self._randomize_cpg_params:
-      self._randomize_cpg_parameters()
-    else:
-      self._cpg._robot_height = self.des_h
-      self._cpg._ground_clearance = self.des_g_c
-
-    if self.randomize_velocity_command:
-      self.sample_vel_command()
-
-    # Disable rendering when setting up models (otherwise too slow)
-    if self._is_render:
-      self._pybullet_client.configureDebugVisualizer(pybullet.COV_ENABLE_RENDERING, 0)
-
-    if self._hard_reset:
-      # set up pybullet simulation
-      self._pybullet_client.resetSimulation()
-      self._pybullet_client.setPhysicsEngineParameter(
-          numSolverIterations=int(self._num_bullet_solver_iterations))
-      self._pybullet_client.setTimeStep(self._time_step)
-      self.plane = self._pybullet_client.loadURDF(pybullet_data.getDataPath()+"/plane.urdf", 
-                                                  basePosition=[80,0,0]) # to extend available running space (shift)
-      self._pybullet_client.changeVisualShape(self.plane, -1, rgbaColor=[1, 1, 1, 0.9])
-      self._pybullet_client.configureDebugVisualizer(
-          self._pybullet_client.COV_ENABLE_PLANAR_REFLECTION, 0)
-      self._pybullet_client.setGravity(0, 0, -9.8)
-      
-      if self._terrain == "GAPS":
-        self._robot_config.INIT_POSITION[2] = 1.305
-        self._robot_config.IS_FALLEN_HEIGHT = 1.18
-      
-      self.robot = (quadruped.Quadruped(pybullet_client=self._pybullet_client,
-                                         robot_config=self._robot_config,
-                                         motor_control_mode=self._motor_control_mode,
-                                         on_rack=self._on_rack,
-                                         render=self._is_render))
-      self._ground_mu_k = 1
-      
-      if self._add_noise:
-        ground_mu_k = mu_min+(1-mu_min)*np.random.random()
-        self._ground_mu_k = ground_mu_k
-        self._pybullet_client.changeDynamics(self.plane, -1, lateralFriction=ground_mu_k)
-        # self._add_base_mass_offset()
-        if self._is_render:
-          print('ground friction coefficient is', ground_mu_k)
-
-      if self._terrain is not None and self._terrain != "NONE":
-        if self._terrain == "SLOPES":
-          self.add_slopes()
-        elif self._terrain == "STAIRS":
-          self.add_stairs(num_stairs=self.num_stairs, stair_height=self.stair_height, stair_width=self.stair_width)
-        elif self._terrain == "GAPS":
-          self.add_gaps(num_gaps=5, gap_width=0.1, between_gaps_width=2)
-        elif self._terrain == "RANDOM":
-          self.add_random_boxes()
-        else:
-          print('Terrain',self._terrain,'is not implemented')
-      elif self._TASK_ENV == "FLAGRUN":
+    def __init__(
+        self,
+        robot_config=robot_config,
+        isRLGymInterface=True,
+        time_step=0.001,
+        action_repeat=10,
+        motor_control_mode="CPG",
+        task_env="LR_COURSE_TASK",
+        observation_space_mode="LR_COURSE_OBS",
+        on_rack=False,
+        render=False,
+        record_video=False,
+        add_noise=True,
+        terrain=None,
+        test_flagrun=False,
+        max_episode_length=10.0,
+        des_vel_x=0.8,
+        des_h=0.25,
+        des_g_c=0.07,
+        randomize_cpg_params=False,
+        randomize_velocity_command=False,
+        des_vel_x_min=0.3,
+        des_vel_x_max=0.8,
+        num_stairs=1,
+        stair_height=0.05,
+        stair_width=0.25,
+        vel_tracking_weight=1.0,
+        drift_weight=0.5,
+        yaw_weight=0.5,
+        orientation_weight=1.0,
+        height_weight=1.0,
+        survival_weight=1.0,
+        enable_vmc=False,
+        k_vmc=250,
+        dot_prod_min=0.85,
+        kp=None,
+        kd=None,
+        slope_pitch=0.2,
+        disable_drift=False,
+        disable_yaw=False,
+        disable_orientation=False,
+        disable_energy=False,
+        **kwargs,
+    ):  # any extra arguments from legacy
+        """Initialize the quadruped gym environment.
+        Args:
+          robot_config: The robot config file, contains A1 parameters.
+
+          isRLGymInterface: If the gym environment is being run as RL or not. Affects if the actions should be scaled.
+
+          time_step: Simulation time step.
+
+          action_repeat: The number of simulation steps where the same actions are applied.
+
+          motor_control_mode: Whether to use Torque control, PD, Cartesian control or CPG.
+
+          task_env: Task trying to learn (fwd locomotion, task specific, etc.)
+
+          observation_space_mode: what should be in here? Check available functions in quadruped.py. also consider CPG states (amplitudes/phases).
+
+          on_rack: Whether to place the quadruped on rack. This is only used to debug the walking gait. In this mode, the quadruped's base is hanged midair so
+          that its walking gait is clearer to visualize.
+
+          render: Whether to render the simulation.
+
+          record_video: Whether to record a video of each trial.
+
+          add_noise: vary coefficient of friction etc.
+
+          terrain: string indicating what kind of terrain ("STAIRS", "SLOPES", "GAPS", "RANDOM"). If you want flat terrain, just put None.
+
+          test_flagrun: follow certain goals in order, fixed coefficient of friction
+        """
+        self._robot_config = robot_config
+        self._isRLGymInterface = isRLGymInterface
+        self._time_step = time_step
+        self._action_repeat = action_repeat
+        self._motor_control_mode = motor_control_mode
+        self._TASK_ENV = task_env
+        self._observation_space_mode = observation_space_mode
+        self._hard_reset = True  # must fully reset simulation at init
+        self._on_rack = on_rack
+        self._is_render = render
+        self._is_record_video = record_video
+        self._add_noise = add_noise
+        self._using_test_env = test_env
+        self._test_flagrun = test_flagrun
         self.goal_id = None
+        self._terrain = terrain
+        self._max_episode_length = max_episode_length
+        if self._add_noise:
+            self._observation_noise_stdev = 0.01  #
+        else:
+            self._observation_noise_stdev = 0.0
+
+        self._randomize_cpg_params = randomize_cpg_params
+        self._h_min = 0.2
+        self._h_max = 0.3
+        self._g_c_min = 0.04
+        self._g_c_max = 0.2
+        self.des_h = des_h
+        self.des_g_c = des_g_c
+
+        self.cpg_h_container = []
+        self.cpg_g_c_container = []
+
+        self.randomize_velocity_command = randomize_velocity_command
+        self._des_vel_x = des_vel_x
+        self._des_vel_x_min = des_vel_x_min
+        self._des_vel_x_max = des_vel_x_max
+        self.des_vel_x_container = []
+
+        self._vel_tracking_weight = vel_tracking_weight
+        self._drift_weight = drift_weight
+        self._yaw_weight = yaw_weight
+        self._orientation_weight = orientation_weight
+        self._height_weight = height_weight
+        self._survival_weight = survival_weight
+
+        self.disable_drift = disable_drift
+        self.disable_yaw = disable_yaw
+        self.disable_orientation = disable_orientation
+        self.disable_energy = disable_energy
+
+        self.enable_vmc = enable_vmc
+        self.k_vmc = k_vmc
+
+        self.dot_prod_min = dot_prod_min
+
+        self._sample_vel_interval = 4.0
+
+        self.num_stairs = num_stairs
+        self.stair_height = stair_height
+        self.stair_width = stair_width
+
+        self.slope_pitch = slope_pitch
+
+        self.kp = kp
+        self.kd = kd
+
+        # other bookkeeping
+        self._num_bullet_solver_iterations = int(300 / action_repeat)
+        self._env_step_counter = 0
+        self._sim_step_counter = 0
+        self._last_base_position = [0, 0, 0]
+        self._last_frame_time = 0.0  # for rendering
+        self._MAX_EP_LEN = self._max_episode_length  # max sim time in seconds, arbitrary
+        self._action_bound = 1.0
+
+        # if using CPG
+        self.setupCPG()
+        self.setupActionSpace()
+        self.setupObservationSpace()
+        if self._is_render:
+            self._pybullet_client = bc.BulletClient(connection_mode=pybullet.GUI)
+        else:
+            self._pybullet_client = bc.BulletClient()
+        self._configure_visualizer()
+        self.videoLogID = None
+        self.seed()
+        self.reset()
+
+    def setupCPG(self):
+        self._cpg = HopfNetwork(use_RL=True)
+
+    ######################################################################################
+    # RL Observation and Action spaces
+    ######################################################################################
+    def setupObservationSpace(self):
+        """Set up observation space for RL."""
+        if self._observation_space_mode == "DEFAULT":
+            observation_high = (
+                np.concatenate((self._robot_config.UPPER_ANGLE_JOINT, self._robot_config.VELOCITY_LIMITS, np.array([1.0] * 4)))
+                + OBSERVATION_EPS
+            )
+            observation_low = (
+                np.concatenate((self._robot_config.LOWER_ANGLE_JOINT, -self._robot_config.VELOCITY_LIMITS, np.array([-1.0] * 4)))
+                - OBSERVATION_EPS
+            )
+
+        elif self._observation_space_mode == "LR_COURSE_OBS":
+            # [TODO] Set observation upper and lower ranges. What are reasonable limits?
+            # Note 50 is arbitrary below, you may have more or less
+            # If using CPG-RL, remember to include limits on these
+            # observation_high = (np.zeros(50) + OBSERVATION_EPS)
+            # observation_low = (np.zeros(50) -  OBSERVATION_EPS)
+
+            """
+      full observation:
+      - body orientation
+      - body linear velocity
+      - body angular velocity
+      - joint position
+      - joint velocities
+      - foot contact booleans
+      - last policy action
+      - CPG states
+        - r
+        - dr
+        - theta
+        - dtheta
+      """
+
+            observation_high = (
+                np.concatenate(
+                    (
+                        np.array([1.0] * 4),  # base orientation in quaternions
+                        np.array([19.0] * 3),  # body linear velocity
+                        np.array([5.0] * 3),  # base angular velocity
+                        self._robot_config.UPPER_ANGLE_JOINT,  # joint position
+                        self._robot_config.VELOCITY_LIMITS,  # joint velocities
+                        np.array([1.0] * 4),  # foot contact booleans
+                        np.array([1.0] * 8),  # last policy action
+                        np.array([MU_UPP] * 4),  # r
+                        np.array([5.0] * 4),  # dr
+                        np.array([np.pi] * 4),  # theta
+                        np.array([4.5 * 2 * np.pi] * 4),  # dtheta
+                    )
+                )
+                + OBSERVATION_EPS
+            )
+
+            observation_low = (
+                np.concatenate(
+                    (
+                        np.array([-1.0] * 4),  # base orientation in quaternions
+                        np.array([-19.0] * 3),  # body linear velocity
+                        np.array([-5.0] * 3),  # base angular velocity
+                        self._robot_config.LOWER_ANGLE_JOINT,  # joint position
+                        -self._robot_config.VELOCITY_LIMITS,  # joint velocities
+                        np.array([0.0] * 4),  # foot contact booleans
+                        np.array([-1.0] * 8),  # last policy action
+                        np.array([MU_LOW] * 4),  # r
+                        np.array([-5.0] * 4),  # dr
+                        np.array([-np.pi] * 4),  # theta
+                        np.array([-4.5 * 2 * np.pi] * 4),  # dtheta,
+                    )
+                )
+                + OBSERVATION_EPS
+            )
+
+        elif self._observation_space_mode == "LR_COURSE_OBS_EXTENDED":
+            observation_high = (
+                np.concatenate(
+                    (
+                        np.array([1.0] * 4),  # base orientation in quaternions
+                        np.array([19.0] * 3),  # body linear velocity
+                        np.array([5.0] * 3),  # base angular velocity
+                        self._robot_config.UPPER_ANGLE_JOINT,  # joint position
+                        self._robot_config.VELOCITY_LIMITS,  # joint velocities
+                        np.array([1.0] * 4),  # foot contact booleans
+                        np.array([1.0] * 8),  # last policy action
+                        np.array([MU_UPP] * 4),  # r
+                        np.array([5.0] * 4),  # dr
+                        np.array([np.pi] * 4),  # theta
+                        np.array([4.5 * 2 * np.pi] * 4),  # dtheta
+                        np.array([self._des_vel_x_max]),  # desired x velocity
+                    )
+                )
+                + OBSERVATION_EPS
+            )
+
+            observation_low = (
+                np.concatenate(
+                    (
+                        np.array([-1.0] * 4),  # base orientation in quaternions
+                        np.array([-19.0] * 3),  # body linear velocity
+                        np.array([-5.0] * 3),  # base angular velocity
+                        self._robot_config.LOWER_ANGLE_JOINT,  # joint position
+                        -self._robot_config.VELOCITY_LIMITS,  # joint velocities
+                        np.array([0.0] * 4),  # foot contact booleans
+                        np.array([-1.0] * 8),  # last policy action
+                        np.array([MU_LOW] * 4),  # r
+                        np.array([-5.0] * 4),  # dr
+                        np.array([-np.pi] * 4),  # theta
+                        np.array([-4.5 * 2 * np.pi] * 4),  # dtheta,
+                        np.array([self._des_vel_x_min]),  # desired x velocity
+                    )
+                )
+                + OBSERVATION_EPS
+            )
+
+        else:
+            raise ValueError("observation space not defined or not intended")
+
+        self.observation_space = spaces.Box(observation_low, observation_high, dtype=np.float32)
+
+    def setupActionSpace(self):
+        """Set up action space for RL."""
+        if self._motor_control_mode in ["PD", "TORQUE", "CARTESIAN_PD"]:
+            action_dim = 12
+        elif self._motor_control_mode in ["CPG"]:
+            action_dim = 8
+            # for simplicity we can disable coupling (remove phi)
+        else:
+            raise ValueError("motor control mode " + self._motor_control_mode + " not implemented yet.")
+        action_high = np.array([1] * action_dim)
+        self.action_space = spaces.Box(-action_high, action_high, dtype=np.float32)
+        self._action_dim = action_dim
+
+    def _get_observation(self):
+        """Get observation, depending on obs space selected."""
+        if self._observation_space_mode == "DEFAULT":
+            self._observation = np.concatenate(
+                (self.robot.GetMotorAngles(), self.robot.GetMotorVelocities(), self.robot.GetBaseOrientation())
+            )
+        elif self._observation_space_mode == "LR_COURSE_OBS":
+            # [TODO] Get observation from robot. What are reasonable measurements we could get on hardware?
+            # if using the CPG, you can include states with self._cpg.get_r(), for example
+            # 50 is arbitrary
+
+            # WE CAN ADD FOOT CONTACT BOOLEANS AND CPG STATES AS ANOTHER OBSERVATION
+
+            """
+      full observation:
+      - body orientation
+      - body linear velocity
+      - body angular velocity
+      - joint position
+      - joint velocities
+      - foot contact booleans
+      - last policy action
+      - CPG states
+        - r
+        - dr
+        - theta
+        - dtheta
+      """
+
+            self._observation = np.concatenate(
+                (
+                    self.robot.GetBaseOrientation(),
+                    self.robot.GetBaseLinearVelocity(),
+                    self.robot.GetBaseAngularVelocity(),
+                    self.robot.GetMotorAngles(),
+                    self.robot.GetMotorVelocities(),
+                    np.array(self.robot.GetContactInfo()[3]),
+                    self._last_action,
+                    self._cpg.get_r(),
+                    self._cpg.get_dr(),
+                    self._cpg.get_theta(),
+                    self._cpg.get_dtheta(),
+                )
+            )
+            expected_size = self.observation_space.shape[0]
+            if self._observation.shape[0] != expected_size:
+                raise ValueError(f"Observation shape mismatch: got {self._observation.shape[0]}, expected {expected_size}")
+        elif self._observation_space_mode == "LR_COURSE_OBS_EXTENDED":
+            # [TODO] Get observation from robot. What are reasonable measurements we could get on hardware?
+            # if using the CPG, you can include states with self._cpg.get_r(), for example
+            # 50 is arbitrary
+
+            # WE CAN ADD FOOT CONTACT BOOLEANS AND CPG STATES AS ANOTHER OBSERVATION
+
+            """
+      full observation:
+      - body orientation
+      - body linear velocity
+      - body angular velocity
+      - joint position
+      - joint velocities
+      - foot contact booleans
+      - last policy action
+      - CPG states
+        - r
+        - dr
+        - theta
+        - dtheta
+      """
+
+            self._observation = np.concatenate(
+                (
+                    self.robot.GetBaseOrientation(),
+                    self.robot.GetBaseLinearVelocity(),
+                    self.robot.GetBaseAngularVelocity(),
+                    self.robot.GetMotorAngles(),
+                    self.robot.GetMotorVelocities(),
+                    np.array(self.robot.GetContactInfo()[3]),
+                    self._last_action,
+                    self._cpg.get_r(),
+                    self._cpg.get_dr(),
+                    self._cpg.get_theta(),
+                    self._cpg.get_dtheta(),
+                    np.array([self._des_vel_x]),
+                )
+            )
+            expected_size = self.observation_space.shape[0]
+            if self._observation.shape[0] != expected_size:
+                raise ValueError(f"Observation shape mismatch: got {self._observation.shape[0]}, expected {expected_size}")
+        else:
+            raise ValueError("observation space not defined or not intended")
+
+        self._add_obs_noise = (
+            np.random.normal(scale=self._observation_noise_stdev, size=self._observation.shape) * self.observation_space.high
+        )
+        return self._observation
+
+    def _noisy_observation(self):
+        self._get_observation()
+        observation = np.array(self._observation)
+        if self._observation_noise_stdev > 0:
+            observation += self._add_obs_noise
+        return observation
+
+    def _get_info(self) -> dict:
+        return {"base_pos": self.robot.GetBasePosition()}
+
+    ######################################################################################
+    # Termination and reward
+    ######################################################################################
+    def is_fallen(self, dot_prod_min=0.85):
+        """Decide whether the quadruped has fallen.
+
+        If the up directions between the base and the world is larger (the dot
+        product is smaller than 0.85) or the base is very low on the ground
+        (the height is smaller than 0.13 meter), the quadruped is considered fallen.
+
+        Returns:
+          Boolean value that indicates whether the quadruped has fallen.
+        """
+        base_rpy = self.robot.GetBaseOrientationRollPitchYaw()
+        orientation = self.robot.GetBaseOrientation()
+        rot_mat = self._pybullet_client.getMatrixFromQuaternion(orientation)
+        local_up = rot_mat[6:]
+        pos = self.robot.GetBasePosition()
+        return np.dot(np.asarray([0, 0, 1]), np.asarray(local_up)) < dot_prod_min or pos[2] < self._robot_config.IS_FALLEN_HEIGHT
+
+    def _termination(self):
+        """Decide whether we should stop the episode and reset the environment."""
+        return self.is_fallen(dot_prod_min=self.dot_prod_min)
+
+    def _reward_fwd_locomotion(self, des_vel_x=None):
+        """Learn forward locomotion at a desired velocity."""
+        vel_tracking_reward = 0.1 * np.clip(self.robot.GetBaseLinearVelocity()[0], 0.2, 1.0)
+        # If you want to track a desired velocity
+        if des_vel_x is not None:
+            # what about using velocity in the body frame?
+            vel_tracking_reward = 0.05 * np.exp(-1 / 0.25 * (self.robot.GetBaseLinearVelocity()[0] - des_vel_x) ** 2)
+
+        # minimize yaw (go straight)
+        yaw_reward = -0.2 * np.abs(self.robot.GetBaseOrientationRollPitchYaw()[2])
+
+        # don't drift laterally
+        drift_reward = -0.01 * abs(self.robot.GetBasePosition()[1])
+
+        # minimize energy
+        energy_reward = 0
+
+        for tau, vel in zip(self._dt_motor_torques, self._dt_motor_velocities):
+            energy_reward += np.abs(np.dot(tau, vel)) * self._time_step
+
+        reward = (
+            vel_tracking_reward
+            + yaw_reward
+            + drift_reward
+            - 0.01 * energy_reward
+            - 0.1 * np.linalg.norm(self.robot.GetBaseOrientation() - np.array([0, 0, 0, 1]))
+        )
+
+        return max(reward, 0)  # keep rewards positive
+
+    def _reward_fwd_locomotion_custom(
+        self,
+        des_vel_x=None,
+        vel_tracking_weight=1.0,
+        drift_weight=0.5,
+        yaw_weight=0.5,
+        orientation_weight=1.0,
+        height_weight=1.0,
+        survival_weight=1.0,
+    ):
+        """Learn forward locomotion at a desired velocity."""
+
+        # Velocity tracking reward
+        actual_vel_x = self.robot.GetBaseLinearVelocity()[0]
+        if des_vel_x is not None:
+            # Exponential reward for velocity tracking
+            vel_tracking_reward = vel_tracking_weight * np.exp(-((actual_vel_x - des_vel_x) ** 2) / 0.25)
+        else:
+            # Reward forward velocity with saturation
+            vel_tracking_reward = vel_tracking_weight * np.clip(actual_vel_x, 0.0, 1.0)
+
+        vel_sq_error = (des_vel_x - self.robot.GetBaseLinearVelocity()[0]) ** 2 + (0.0 - self.robot.GetBaseLinearVelocity()[1]) ** 2
+        vel_tracking_reward = np.exp(-vel_sq_error / 0.25)
+
+        # Penalize lateral drift
+        lateral_vel = self.robot.GetBaseLinearVelocity()[1]
+        drift_reward = -drift_weight * lateral_vel**2
+        drift_reward = -drift_weight * np.exp(-((lateral_vel - 0.0) ** 2) / 0.25)
+
+        # Penalize yaw deviation (go straight)
+        yaw = self.robot.GetBaseOrientationRollPitchYaw()[2]
+        yaw_reward = -yaw_weight * yaw**2
+
+        # Penalize roll and pitch to maintain upright posture
+        roll, pitch, _ = self.robot.GetBaseOrientationRollPitchYaw()
+        orientation_penalty = -orientation_weight * (roll**2 + pitch**2)
+
+        base_angular_velocity = self.robot.GetTrueBaseRollPitchYawRate()
+        orientation_penalty = -orientation_weight * np.linalg.norm(base_angular_velocity[:2]) ** 2
+
+        # Energy penalty (instantaneous power, not accumulated)
+        if self._dt_motor_torques and self._dt_motor_velocities:
+            # Use only the most recent timestep
+            instantaneous_power = np.abs(np.dot(self._dt_motor_torques[-1], self._dt_motor_velocities[-1]))
+            energy_reward = -0.001 * instantaneous_power
+        else:
+            energy_reward = 0.0
+
+        # Penalize vertical velocity (should stay at constant height)
+        vertical_vel = self.robot.GetBaseLinearVelocity()[2]
+        height_reward = -height_weight * vertical_vel**2
+
+        survival_reward = 1.0 * survival_weight
+
+        # Total reward
+        reward = vel_tracking_reward + drift_reward + yaw_reward + orientation_penalty + energy_reward + height_reward + survival_reward
+
+        return reward
+
+    def _reward_fwd_locomotion_custom_old(
+        self, des_vel_x=None, disable_drift=False, disable_yaw=False, disable_orientation=False, disable_energy=False
+    ):
+        """Learn forward locomotion at a desired velocity."""
+
+        # Velocity tracking reward
+        actual_vel_x = self.robot.GetBaseLinearVelocity()[0]
+        if des_vel_x is not None:
+            # Exponential reward for velocity tracking
+            vel_tracking_reward = 1.0 * np.exp(-((actual_vel_x - des_vel_x) ** 2) / 0.25)
+        else:
+            # Reward forward velocity with saturation
+            vel_tracking_reward = 1.0 * np.clip(actual_vel_x, 0.0, 1.0)
+
+        # Penalize lateral drift
+        drift_reward = 0.0
+        lateral_vel = self.robot.GetBaseLinearVelocity()[1]
+        if not disable_drift:
+            drift_reward = -0.5 * lateral_vel**2
+
+        # Penalize yaw deviation (go straight)
+        yaw = self.robot.GetBaseOrientationRollPitchYaw()[2]
+        yaw_reward = 0.0
+        if not disable_yaw:
+            yaw_reward = -0.5 * yaw**2
+
+        # Penalize roll and pitch to maintain upright posture
+        roll, pitch, _ = self.robot.GetBaseOrientationRollPitchYaw()
+        orientation_reward = 0.0
+        if not disable_orientation:
+            orientation_reward = -1.0 * (roll**2 + pitch**2)
+
+        # Energy penalty (instantaneous power, not accumulated)
+        if self._dt_motor_torques and self._dt_motor_velocities and not disable_energy:
+            # Use only the most recent timestep
+            instantaneous_power = np.abs(np.dot(self._dt_motor_torques[-1], self._dt_motor_velocities[-1]))
+            energy_reward = -0.001 * instantaneous_power
+        else:
+            energy_reward = 0.0
+
+        # Penalize vertical velocity (should stay at constant height)
+        vertical_vel = self.robot.GetBaseLinearVelocity()[2]
+        height_reward = -1.0 * vertical_vel**2
+
+        # Total reward
+        reward = vel_tracking_reward + drift_reward + yaw_reward + orientation_reward + energy_reward + height_reward
+
+        return reward
+
+    def _reward_fwd_locomotion_basic(self):
+        """Reward progress in the positive world x direction."""
+        current_base_position = self.robot.GetBasePosition()
+        forward_reward = current_base_position[0] - self._last_base_position[0]
+        self._last_base_position = current_base_position
+        # clip reward to MAX_FWD_VELOCITY (avoid exploiting simulator dynamics)
+        if MAX_FWD_VELOCITY < np.inf:
+            # calculate what max distance can be over last time interval based on max allowed fwd velocity
+            max_dist = MAX_FWD_VELOCITY * (self._time_step * self._action_repeat)
+            forward_reward = min(forward_reward, max_dist)
+
+        return 2.0 * forward_reward
+
+    def get_distance_and_angle_to_goal(self):
+        """Helper to return distance and angle to current goal location."""
+        # current object location
+        base_pos = self.robot.GetBasePosition()
+        yaw = self.robot.GetBaseOrientationRollPitchYaw()[2]
+        goal_vec = self._goal_location
+        dist_to_goal = np.linalg.norm(base_pos[0:2] - goal_vec)
+
+        # angle to goal (from current heading)
+        body_dir_vec = np.matmul(rotation_matrix(yaw), np.array([[1], [0]]))
+        body_goal_vec = goal_vec - base_pos[0:2]
+        body_dir_vec = body_dir_vec.reshape(
+            2,
+        )
+        body_goal_vec = body_goal_vec.reshape(
+            2,
+        )
+
+        Vn = unit_vector(np.array([0, 0, 1]))
+        c = np.cross(np.hstack([body_dir_vec, 0]), np.hstack([body_goal_vec, 0]))
+        angle = angle_between(body_dir_vec, body_goal_vec)
+        angle = angle * np.sign(np.dot(Vn, c))
+
+        return dist_to_goal, angle
+
+    def _reward_flag_run(self):
+        """Learn to move towards goal location."""
+        curr_dist_to_goal, angle = self.get_distance_and_angle_to_goal()
+
+        # minimize distance to goal (we want to move towards the goal)
+        dist_reward = 10 * (self._prev_pos_to_goal - curr_dist_to_goal)
+
+        # minimize yaw deviation to goal (necessary?)
+        yaw_reward = 0  # -0.01 * np.abs(angle)
+
+        # minimize energy
+        energy_reward = 0
+        for tau, vel in zip(self._dt_motor_torques, self._dt_motor_velocities):
+            energy_reward += np.abs(np.dot(tau, vel)) * self._time_step
+
+        reward = dist_reward + yaw_reward - 0.001 * energy_reward
+
+        return max(reward, 0)  # keep rewards positive
+
+    def _reward_lr_course(self, des_vel_x=None, des_vel_y=0.0, des_yaw_rate=0.0):
+        """Implement your reward function here. How will you improve upon the above?"""
+        # [TODO] add your reward function.
+
+        # vel_tracking_reward = 0.1 * np.clip(self.robot.GetBaseLinearVelocity()[0], 0.2, 1.0)
+        # # If you want to track a desired velocity
+        # if des_vel_x is not None:
+        #   # what about using velocity in the body frame?
+        #   vel_tracking_reward = 0.05 * np.exp( -1/ 0.25 *  (self.robot.GetBaseLinearVelocity()[0] - des_vel_x)**2 )
+
+        def calculate_reward(des_value, measured_value):
+            return np.exp(-1 / 0.25 * (np.linalg.norm(des_value - measured_value)) ** 2)
+
+        x_vel_reward = calculate_reward(des_vel_x, self.robot.GetBaseLinearVelocity()[0])
+
+        y_vel_reward = calculate_reward(des_vel_y, self.robot.GetBaseLinearVelocity()[1])
+
+        angular_velocity_tracking = calculate_reward(des_yaw_rate, self.robot.GetTrueBaseRollPitchYawRate()[2])
+
+        z_vel_penalty = -(self.robot.GetBaseLinearVelocity()[2] ** 2)
+
+        base_angular_velocity = self.robot.GetTrueBaseRollPitchYawRate()
+        omega_xy = base_angular_velocity[:2]  # Extract roll rate and pitch rate (x and y components)
+        angular_velocity_penalty = -(np.linalg.norm(omega_xy) ** 2)
+
+        work_penalty = 0
+        if hasattr(self, "_prev_motor_velocities"):
+            dq_diff = np.array(self._dt_motor_velocities[-1]) - np.array(self._prev_motor_velocities)
+            work_penalty = np.abs(np.dot(self._dt_motor_torques[-1], dq_diff))
+        self._prev_motor_velocities = self._dt_motor_velocities[-1].copy() if self._dt_motor_velocities else np.zeros(12)
+
+        # reward = 0.75 * self._time_step * x_vel_reward \
+        #         + 0.75 * self._time_step * y_vel_reward \
+        #         + 0.5 * self._time_step * angular_velocity_tracking \
+        #         + 2. * self._time_step * z_vel_penalty \
+        #         + 0.05 * self._time_step * angular_velocity_penalty \
+        #         + 0.001 * self._time_step * work_penalty \
+        reward = (
+            0.75 * self._time_step * x_vel_reward
+            + 0.75 * self._time_step * y_vel_reward
+            + 2.0 * self._time_step * z_vel_penalty
+            + 0.001 * self._time_step * work_penalty
+        )
+        return max(reward, 0)  # keep rewards positive
+
+    def _reward_eth(self, des_vel_x=0.8, des_vel_y=0.0, des_yaw_rate=0.0):
+        # 1. Linear Velocity Tracking (Corrected to Vector Norm)
+        # Source [548]: phi(v*_xy - v_xy)
+        vel_sq_error = (des_vel_x - self.robot.GetBaseLinearVelocity()[0]) ** 2 + (des_vel_y - self.robot.GetBaseLinearVelocity()[1]) ** 2
+        lin_vel_reward = np.exp(-vel_sq_error / 0.25)
+
+        # 2. Angular Velocity Tracking
+        # Source [548]: phi(omega*_z - omega_z)
+        ang_vel_error = (des_yaw_rate - self.robot.GetTrueBaseRollPitchYawRate()[2]) ** 2
+        ang_vel_reward = np.exp(-ang_vel_error / 0.25)
+
+        # 3. Linear Velocity Penalty (z-axis)
+        # Source [548]: -v_{b,z}^2
+        linear_vel_penalty = -(self.robot.GetBaseLinearVelocity()[2] ** 2)
+
+        # 4. Angular Velocity Penalty (xy-axes)
+        # Source [548]: -||omega_xy||^2
+        base_angular_velocity = self.robot.GetTrueBaseRollPitchYawRate()
+        angular_velocity_penalty = -(np.linalg.norm(base_angular_velocity[:2]) ** 2)
+
+        # 5. Joint Motion (Minimize Accel and Vel)
+        # Source [548]: -||q_dot||^2 - ||q_ddot||^2 (inferred from table grouping)
+        dq = np.array(self._dt_motor_velocities[-1])
+        ddq = np.array(self._dt_motor_accelerations[-1])
+        joint_motion = -(np.linalg.norm(ddq) ** 2) - np.linalg.norm(dq) ** 2
+
+        # 6. Joint Torques
+        # Source [548]: -||tau||^2
+        torques = np.array(self._dt_motor_torques[-1])
+        joint_torques = -(np.linalg.norm(torques) ** 2)
+
+        # 7. Action Rate (Smoothness)
+        # Source [548]: -||a_t - a_{t-1}||^2
+        # Ensure you implemented the _prev_action_for_reward logic in step()
+        if hasattr(self, "_prev_action_for_reward"):
+            action_diff = self._last_action - self._prev_action_for_reward
+            action_rate = -(np.linalg.norm(action_diff) ** 2)
+        else:
+            action_rate = 0.0
+
+        # Weights from Table 2
+        # Note: lin_vel_reward combines x and y, so we apply the 1.0dt weight once to the vector term.
+        reward = (
+            1.0 * self._time_step * lin_vel_reward
+            + 0.5 * self._time_step * ang_vel_reward
+            + 4.0 * self._time_step * linear_vel_penalty
+            + 0.05 * self._time_step * angular_velocity_penalty
+            + 0.001 * self._time_step * joint_motion
+            + 0.00002 * self._time_step * joint_torques
+            + 0.25 * self._time_step * action_rate
+        )
+
+        return reward
+
+    def _reward_cpg_rl(self, des_vel_x=None, des_vel_y=0.0, des_yaw_rate=0.0):
+        """
+        Reward function strictly following CPG-RL Paper (Bellegarda et al.).
+        Reference: Section III-C, Page 4.
+        """
+
+        # --- Constants & Weights (from Paper Source 185) ---
+        # The paper lists weights multiplied by dt (0.01).
+        # We use the raw coefficients for per-step reward calculation.
+        w_vel_x = 0.75
+        w_vel_y = 0.75
+        w_yaw = 0.5
+        w_z_pen = 2.0  # Penalty for vertical bounce
+        w_ang_pen = 0.05  # Penalty for roll/pitch rates
+        w_work_pen = 0.001  # Penalty for energy/work
+
+        # Gaussian Kernel: f(x) = exp(-x^2 / 0.25) [Source 185]
+        def gaussian(error, sigma_sq=0.25):
+            return np.exp(-(error**2) / sigma_sq)
+
+        # --- 1. Velocity Tracking (Body X) [Positive Reward] ---
+        # "linear velocity tracking, body x direction" [Source 183]
+        actual_vel_x = self.robot.GetBaseLinearVelocity()[0]
+        if des_vel_x is not None:
+            r_vel_x = w_vel_x * gaussian(actual_vel_x - des_vel_x)
+        else:
+            # If no command, track 0 or maintain current (paper implies tracking logic)
+            r_vel_x = w_vel_x * gaussian(actual_vel_x - 0.0)
+
+        # --- 2. Drift Tracking (Body Y) [Positive Reward] ---
+        # "linear velocity tracking, body y direction" [Source 183]
+        # Rewards keeping lateral velocity near 0.
+        actual_vel_y = self.robot.GetBaseLinearVelocity()[1]
+        r_vel_y = w_vel_y * gaussian(actual_vel_y - des_vel_y)
+
+        # --- 3. Yaw Rate Tracking [Positive Reward] ---
+        # "angular velocity tracking (body yaw rate)" [Source 183]
+        actual_yaw_rate = self.robot.GetBaseAngularVelocity()[2]
+        r_yaw = w_yaw * gaussian(actual_yaw_rate - des_yaw_rate)
+
+        # --- 4. Vertical Velocity Penalty [Negative] ---
+        # "linear velocity penalty in body z direction" [Source 183]
+        # Penalizes bouncing.
+        actual_vel_z = self.robot.GetBaseLinearVelocity()[2]
+        r_z = -w_z_pen * (actual_vel_z**2)
+
+        # --- 5. Angular Rate Penalty (Roll/Pitch) [Negative] ---
+        # "angular velocity penalty... -||w_b,xy||^2" [Source 183]
+        # Note: Penalizes RATES (wobble), not POSITION (tilt).
+        # This prevents the "stiff robot" problem.
+        ang_vel = self.robot.GetBaseAngularVelocity()
+        w_xy_sq = ang_vel[0] ** 2 + ang_vel[1] ** 2
+        r_ang_stab = -w_ang_pen * w_xy_sq
+
+        # --- 6. Work/Energy Penalty [Negative] ---
+        # "work ... -|tau * q_dot|" [Source 184]
+        # Using dot product for instantaneous power
+        if self._dt_motor_torques and self._dt_motor_velocities:
+            power = np.abs(np.dot(self._dt_motor_torques[-1], self._dt_motor_velocities[-1]))
+            r_work = -w_work_pen * power
+        else:
+            r_work = 0.0
+
+        # --- Summation ---
+        # Because r_vel_y and r_yaw are positive Gaussian terms,
+        # the robot gets ~1.25 reward just for standing still.
+        # This acts as the "Implicit Survival Bonus".
+        reward = r_vel_x + r_vel_y + r_yaw + r_z + r_ang_stab + r_work
+
+        # Optional: Explicit Survival Bonus
+        # Uncomment if your robot still terminates early during the first 100 iterations.
+        # reward += 1.0
+
+        return reward
+
+    def _reward(self):
+        """Get reward depending on task"""
+        if self._TASK_ENV == "FWD_LOCOMOTION":
+            return self._reward_fwd_locomotion(des_vel_x=self._des_vel_x)
+        elif self._TASK_ENV == "FWD_CUSTOM":
+            return self._reward_fwd_locomotion_custom(
+                des_vel_x=self._des_vel_x,
+                vel_tracking_weight=self._vel_tracking_weight,
+                drift_weight=self._drift_weight,
+                yaw_weight=self._yaw_weight,
+                orientation_weight=self._orientation_weight,
+                height_weight=self._height_weight,
+                survival_weight=self._survival_weight,
+            )
+        elif self._TASK_ENV == "FWD_CUSTOM_OLD":
+            return self._reward_fwd_locomotion_custom_old(
+                des_vel_x=self._des_vel_x,
+                disable_drift=self.disable_drift,
+                disable_yaw=self.disable_yaw,
+                disable_orientation=self.disable_orientation,
+                disable_energy=self.disable_energy,
+            )
+        elif self._TASK_ENV == "FWD_BASIC":
+            return self._reward_fwd_locomotion_basic()
+        elif self._TASK_ENV == "LR_COURSE_TASK":
+            return self._reward_lr_course(des_vel_x=self._des_vel_x)
+        elif self._TASK_ENV == "ETH":
+            return self._reward_eth(des_vel_x=self._des_vel_x)
+        elif self._TASK_ENV == "CPG_RL":
+            return self._reward_cpg_rl(des_vel_x=self._des_vel_x)
+        elif self._TASK_ENV == "FLAGRUN":
+            return self._reward_flag_run()
+        else:
+            raise ValueError("This task mode not implemented yet.")
+
+    ######################################################################################
+    # Step simulation, map policy network actions to joint commands, etc.
+    ######################################################################################
+    def _transform_action_to_motor_command(self, action):
+        """Map actions from RL (i.e. in [-1,1]) to joint commands based on motor_control_mode."""
+        # clip actions to action bounds
+        action = np.clip(action, -self._action_bound - ACTION_EPS, self._action_bound + ACTION_EPS)
+
+        if self._motor_control_mode == "PD":
+            action = self._scale_helper(action, self._robot_config.LOWER_ANGLE_JOINT, self._robot_config.UPPER_ANGLE_JOINT)
+            action = np.clip(action, self._robot_config.LOWER_ANGLE_JOINT, self._robot_config.UPPER_ANGLE_JOINT)
+        elif self._motor_control_mode == "CARTESIAN_PD":
+            action = self.ScaleActionToCartesianPos(action)
+        elif self._motor_control_mode == "CPG":
+            action = self.ScaleActionToCPGStateModulations(action)
+        else:
+            raise ValueError("RL motor control mode" + self._motor_control_mode + "not implemented yet.")
+
+        return action
+
+    def _scale_helper(self, action, lower_lim, upper_lim):
+        """Helper to linearly scale from [-1,1] to lower/upper limits."""
+        new_a = lower_lim + 0.5 * (action + 1) * (upper_lim - lower_lim)
+
+        return np.clip(new_a, lower_lim, upper_lim)
+
+    def ScaleActionToCartesianPos(self, actions):
+        """Scale RL action to Cartesian PD ranges.
+        Edit ranges, limits etc., but make sure to use Cartesian PD to compute the torques.
+        """
+        # clip RL actions to be between -1 and 1 (standard RL technique)
+        u = np.clip(actions, -1, 1)
+
+        # scale to corresponding desired foot positions (i.e. ranges in x,y,z we allow the agent to choose foot positions)
+        # [TODO: edit (do you think these should these be increased? How limiting is this?)]
+        scale_array = np.array([0.1, 0.05, 0.08] * 4)
+
+        # add to nominal foot position in leg frame (what are the final ranges?)
+        des_foot_pos = self._robot_config.NOMINAL_FOOT_POS_LEG_FRAME + scale_array * u
+
+        # get Cartesian kp and kd gains (can be modified)
+        kpCartesian = self._robot_config.kpCartesian
+        kdCartesian = self._robot_config.kdCartesian
+
+        # get current motor velocities
+        dq = self.robot.GetMotorVelocities()
+
+        action = np.zeros(12)
+        for i in range(4):
+            # get Jacobian and foot position in leg frame for leg i (see ComputeJacobianAndPosition() in quadruped.py)
+            # [TODO]
+            J, pos_leg_frame = self.env.robot.ComputeJacobianAndPosition(i)
+
+            # desired foot position i (from RL above)
+            pd = np.zeros(3)  # [TODO]
+            pd = des_foot_pos[3 * i : 3 * i + 3]
+
+            # desired foot velocity i
+            vd = np.zeros(3)  # [TODO]
+
+            # foot velocity in leg frame i (Equation 2)
+            # [TODO]
+            foot_lin_vel_leg_frame = J @ dq[3 * i : 3 * i + 3]
+
+            # calculate torques with Cartesian PD (Equation 5) [Make sure you are using matrix multiplications]
+            tau = np.zeros(3)  # [TODO]
+            tau += J.T @ (kpCartesian @ (pd - pos_leg_frame) + kdCartesian @ (vd - foot_lin_vel_leg_frame))
+
+            action[3 * i : 3 * i + 3] = tau
+
+        return action
+
+    def ScaleActionToCPGStateModulations(self, actions):
+        """Scale RL action to CPG modulation parameters."""
+        # clip RL actions to be between -1 and 1 (standard RL technique)
+        u = np.clip(actions, -1, 1)
+
+        # scale omega to ranges, and set in CPG (range is an example)
+        omega = self._scale_helper(u[0:4], 5, 4.5 * 2 * np.pi)
+        self._cpg.set_omega_rl(omega)
+
+        # scale mu to ranges, and set in CPG (squared since we converge to the sqrt in the CPG amplitude)
+        mus = self._scale_helper(u[4:8], MU_LOW**2, MU_UPP**2)
+        self._cpg.set_mu_rl(mus)
+
+        # integrate CPG, get mapping to foot positions
+        xs, zs = self._cpg.update()
+
+        # IK parameters
+        foot_y = self._robot_config.HIP_LINK_LENGTH
+        sideSign = np.array([-1, 1, -1, 1])  # get correct hip sign (body right is negative)
+
+        # get current motor velocities
+        q = self.robot.GetMotorAngles()
+        dq = self.robot.GetMotorVelocities()
+
+        action = np.zeros(12)
+        # loop through each leg
+        for i in range(4):
+            # get desired foot i pos (xi, yi, zi)
+            x = xs[i]
+            y = sideSign[i] * foot_y  # careful of sign
+            z = zs[i]
+
+            # call inverse kinematics to get corresponding joint angles
+            q_des = np.zeros(3)  # [TODO]
+            q_des = self.robot.ComputeInverseKinematics(i, [x, y, z])
+
+            if self.kp is not None:
+                kp = np.diag([self.kp, self.kp, self.kp])
+            else:
+                kp = robot_config.kp
+
+            if self.kd is not None:
+                kd = np.diag([self.kd, self.kd, self.kd])
+            else:
+                kd = robot_config.kd
+
+            # Add joint PD contribution to tau
+            tau = np.zeros(3)  # [TODO]
+            tau += kp @ (q_des - q[3 * i : 3 * i + 3]) + kd @ (-dq[3 * i : 3 * i + 3])
+
+            # add Cartesian PD contribution (as you wish)
+            # _, des_xyz_leg_pos = self.robot.ComputeJacobianAndPosition(legID=i, specific_q=q_des)
+            # J, pos_leg_frame = self.robot.ComputeJacobianAndPosition(i)
+            # foot_lin_vel_leg_frame = J @ dq[3*i:3*i+3]
+            # tau += J.T @ (robot_config.kpCartesian @ (des_xyz_leg_pos - pos_leg_frame) + robot_config.kdCartesian @ (-foot_lin_vel_leg_frame))
+
+            if self.enable_vmc:
+                J, _ = self.robot.ComputeJacobianAndPosition(i)
+                orientation_matrix = self.robot.GetBaseOrientationMatrix()
+                P = orientation_matrix @ np.array([[1.0, 1.0, -1.0, -1.0], [-1.0, 1.0, -1.0, 1.0], [0.0, 0.0, 0.0, 0.0]])
+
+                # TODO: compute virtual model torques for leg_id
+                F_vmc = np.zeros((2, 4))
+                F_vmc = np.append(F_vmc, self.k_vmc * (np.array([[0, 0, 1]]) @ P), axis=0)
+                tau_i = np.zeros(3)
+                tau_i += J.T @ F_vmc[:, i]
+
+                tau += tau_i
+
+            action[3 * i : 3 * i + 3] = tau
+
+        return action
+
+    def step(self, action):
+        """Step forward the simulation, given the action."""
+        curr_act = action.copy()
+        if not hasattr(self, "_prev_action_for_reward"):
+            self._prev_action_for_reward = np.zeros_like(curr_act)
+        # save motor torques and velocities to compute power in reward function
+        self._dt_motor_torques = []
+        self._dt_motor_velocities = []
+        self._dt_motor_accelerations = []
+
+        self.robot.UpdateMotorAccelerations(current_time=self.get_sim_time())
+
+        if "FLAGRUN" in self._TASK_ENV:
+            self._prev_pos_to_goal, _ = self.get_distance_and_angle_to_goal()
+
+        for _ in range(self._action_repeat):
+            if self._isRLGymInterface:
+                proc_action = self._transform_action_to_motor_command(curr_act)
+            else:
+                proc_action = curr_act
+
+            self.robot.ApplyAction(proc_action)
+            self._pybullet_client.stepSimulation()
+            self._sim_step_counter += 1
+            self._dt_motor_torques.append(self.robot.GetMotorTorques())
+            self._dt_motor_velocities.append(self.robot.GetMotorVelocities())
+            self._dt_motor_accelerations.append(self.robot.GetMotorAccelerations())
+
+            if self._is_render:
+                self._render_step_helper()
+
+        if self.get_sim_time() % self._sample_vel_interval < self._time_step * self._action_repeat and self.randomize_velocity_command:
+            self.sample_vel_command()
+
+        self._last_action = curr_act
+        self._env_step_counter += 1
+        reward = self._reward()
+        truncated = False
+
+        if self.get_sim_time() > self._MAX_EP_LEN and not self._test_flagrun:
+            truncated = True
+
+        if "FLAGRUN" in self._TASK_ENV:
+            dist_to_goal, _ = self.get_distance_and_angle_to_goal()
+
+            if dist_to_goal < 0.5:
+                self._reset_goal()
+
+        return np.array(self._noisy_observation()), reward, self._termination(), truncated, self._get_info()
+
+    ######################################################################################
+    # Reset
+    ######################################################################################
+    def reset(self, seed: Optional[float] = None):
+        """Set up simulation environment."""
+        mu_min = 0.5
+
+        # Update seed
+        self.seed(seed)
+
+        self._last_action = np.zeros(self._action_dim)
+
+        if hasattr(self, "_cpg"):
+            self._cpg.X = np.zeros((2, 4))
+            self._cpg.X[0, :] = 0.1
+            self._cpg.X[1, :] = self._cpg.PHI[0, :]
+
+            # Force CPG to update and ensure states are initialized
+            self._cpg.update()
+
+        # Randomize CPG parameters for domain randomization
+        if self._randomize_cpg_params:
+            self._randomize_cpg_parameters()
+        else:
+            self._cpg._robot_height = self.des_h
+            self._cpg._ground_clearance = self.des_g_c
+
+        if self.randomize_velocity_command:
+            self.sample_vel_command()
+
+        # Disable rendering when setting up models (otherwise too slow)
+        if self._is_render:
+            self._pybullet_client.configureDebugVisualizer(pybullet.COV_ENABLE_RENDERING, 0)
+
+        if self._hard_reset:
+            # set up pybullet simulation
+            self._pybullet_client.resetSimulation()
+            self._pybullet_client.setPhysicsEngineParameter(numSolverIterations=int(self._num_bullet_solver_iterations))
+            self._pybullet_client.setTimeStep(self._time_step)
+            self.plane = self._pybullet_client.loadURDF(
+                pybullet_data.getDataPath() + "/plane.urdf", basePosition=[80, 0, 0]
+            )  # to extend available running space (shift)
+            self._pybullet_client.changeVisualShape(self.plane, -1, rgbaColor=[1, 1, 1, 0.9])
+            self._pybullet_client.configureDebugVisualizer(self._pybullet_client.COV_ENABLE_PLANAR_REFLECTION, 0)
+            self._pybullet_client.setGravity(0, 0, -9.8)
+
+            if self._terrain == "GAPS":
+                self._robot_config.INIT_POSITION[2] = 1.305
+                self._robot_config.IS_FALLEN_HEIGHT = 1.18
+
+            self.robot = quadruped.Quadruped(
+                pybullet_client=self._pybullet_client,
+                robot_config=self._robot_config,
+                motor_control_mode=self._motor_control_mode,
+                on_rack=self._on_rack,
+                render=self._is_render,
+            )
+            self._ground_mu_k = 1
+
+            if self._add_noise:
+                ground_mu_k = mu_min + (1 - mu_min) * np.random.random()
+                self._ground_mu_k = ground_mu_k
+                self._pybullet_client.changeDynamics(self.plane, -1, lateralFriction=ground_mu_k)
+                # self._add_base_mass_offset()
+                if self._is_render:
+                    print("ground friction coefficient is", ground_mu_k)
+
+            if self._terrain is not None and self._terrain != "NONE":
+                if self._terrain == "SLOPES":
+                    self.add_slopes()
+                elif self._terrain == "STAIRS":
+                    self.add_stairs(num_stairs=self.num_stairs, stair_height=self.stair_height, stair_width=self.stair_width)
+                elif self._terrain == "GAPS":
+                    self.add_gaps(num_gaps=5, gap_width=0.1, between_gaps_width=2)
+                elif self._terrain == "RANDOM":
+                    self.add_random_boxes()
+                else:
+                    print("Terrain", self._terrain, "is not implemented")
+            elif self._TASK_ENV == "FLAGRUN":
+                self.goal_id = None
+                if self._test_flagrun:
+                    self._ground_mu_k = ground_mu_k = 0.8
+                    self._pybullet_client.changeDynamics(self.plane, -1, lateralFriction=ground_mu_k)
+                    self._add_noise = False
+                    self._goal_idx = 0
+                    self.goal_x = np.arange(np.pi / 4, 11, np.pi / 2)
+                    self.goal_y = 0.2 * self.goal_x * np.sin(2 * self.goal_x)
+                self._reset_goal()
+        else:
+            self.robot.Reset(reload_urdf=False)
+
+        self._env_step_counter = 0
+        self._sim_step_counter = 0
+        self._last_base_position = [0, 0, 0]
+
+        # Enable rendering again
+        if self._is_render:
+            self._pybullet_client.resetDebugVisualizerCamera(self._cam_dist, self._cam_yaw, self._cam_pitch, [0, 0, 0])
+            self._pybullet_client.configureDebugVisualizer(pybullet.COV_ENABLE_RENDERING, 1)
+
+        self._settle_robot()
+
+        if self._is_record_video:
+            self.recordVideoHelper()
+
+        return self._noisy_observation(), self._get_info()
+
+    def sample_vel_command(self):
+        self._des_vel_x = np.random.uniform(self._des_vel_x_min, self._des_vel_x_max)
+        if self._des_vel_x not in self.des_vel_x_container:
+            self.des_vel_x_container.append(self._des_vel_x)
+
+    def _randomize_cpg_parameters(self):
+        """Randomize CPG height and ground clearance parameters for domain randomization."""
+
+        # Generate random values
+        random_height = np.random.uniform(self._h_min, self._h_max)
+        random_ground_clearance = np.random.uniform(self._g_c_min, self._g_c_max)
+
+        if random_height not in self.cpg_h_container:
+            self.cpg_h_container.append(random_height)
+        if random_ground_clearance not in self.cpg_g_c_container:
+            self.cpg_g_c_container.append(random_ground_clearance)
+
+        # Update CPG parameters
+        self._cpg._robot_height = random_height
+        self._cpg._ground_clearance = random_ground_clearance
+
+        if self._is_render:
+            print(f"Randomized CPG - Height: {random_height:.3f}, Ground Clearance: {random_ground_clearance:.3f}")
+
+    def _reset_goal(self):
+        """Reset goal location for flagrun."""
+        try:
+            if self.goal_id is not None:
+                self._pybullet_client.removeBody(self.goal_id)
+        except:
+            pass
+
         if self._test_flagrun:
-          self._ground_mu_k = ground_mu_k = 0.8
-          self._pybullet_client.changeDynamics(self.plane, -1, lateralFriction=ground_mu_k)
-          self._add_noise = False 
-          self._goal_idx = 0
-          self.goal_x = np.arange(np.pi/4, 11, np.pi/2)
-          self.goal_y = 0.2 * self.goal_x * np.sin(2*self.goal_x)
-        self._reset_goal()
-    else:
-      self.robot.Reset(reload_urdf=False)
+            self._goal_location = np.array([self.goal_x[self._goal_idx], self.goal_y[self._goal_idx]])
+            self._goal_idx = min(self._goal_idx + 1, len(self.goal_x))
+        else:
+            self._goal_location = 6 * (np.random.random((2,)) - 0.5)
+            self._goal_location += self.robot.GetBasePosition()[0:2]
 
-    self._env_step_counter = 0
-    self._sim_step_counter = 0
-    self._last_base_position = [0, 0, 0]
+        sh_colBox = self._pybullet_client.createCollisionShape(self._pybullet_client.GEOM_BOX, halfExtents=[0.2, 0.2, 0.2])
+        orn = self._pybullet_client.getQuaternionFromEuler([0, 0, 0])
+        self.goal_id = self._pybullet_client.createMultiBody(
+            baseMass=0,
+            baseCollisionShapeIndex=sh_colBox,
+            basePosition=[self._goal_location[0], self._goal_location[1], 0.6],
+            baseOrientation=orn,
+        )
+        # print('goal is at ', self._goal_location)
 
-    # Enable rendering again
-    if self._is_render:
-      self._pybullet_client.resetDebugVisualizerCamera(self._cam_dist, self._cam_yaw,
-                                                       self._cam_pitch, [0, 0, 0])
-      self._pybullet_client.configureDebugVisualizer(pybullet.COV_ENABLE_RENDERING, 1)
+    def _settle_robot(self):
+        """Settle robot and add noise to init configuration."""
+        # change to PD control mode to set initial position, then set back..
+        tmp_save_motor_control_mode_ENV = self._motor_control_mode
+        tmp_save_motor_control_mode_ROB = self.robot._motor_control_mode
+        self._motor_control_mode = "PD"
+        self.robot._motor_control_mode = "PD"
 
-    self._settle_robot()
-    
-    if self._is_record_video:
-      self.recordVideoHelper()
-    
-    return self._noisy_observation(), self._get_info()
-  
-  def sample_vel_command(self):
-    self._des_vel_x = np.random.uniform(self._des_vel_x_min, self._des_vel_x_max)
-    if self._des_vel_x not in self.des_vel_x_container:
-      self.des_vel_x_container.append(self._des_vel_x)
-  
-  def _randomize_cpg_parameters(self):
-    """Randomize CPG height and ground clearance parameters for domain randomization."""
-    
-    # Generate random values
-    random_height = np.random.uniform(self._h_min, self._h_max)
-    random_ground_clearance = np.random.uniform(self._g_c_min, self._g_c_max)
+        try:
+            tmp_save_motor_control_mode_MOT = self.robot._motor_model._motor_control_mode
+            self.robot._motor_model._motor_control_mode = "PD"
+        except:
+            pass
 
-    if random_height not in self.cpg_h_container:
-      self.cpg_h_container.append(random_height)
-    if random_ground_clearance not in self.cpg_g_c_container:
-      self.cpg_g_c_container.append(random_ground_clearance)
-    
-    # Update CPG parameters
-    self._cpg._robot_height = random_height
-    self._cpg._ground_clearance = random_ground_clearance
-    
-    if self._is_render:
-        print(f'Randomized CPG - Height: {random_height:.3f}, Ground Clearance: {random_ground_clearance:.3f}')
+        init_motor_angles = self._robot_config.INIT_MOTOR_ANGLES + self._robot_config.JOINT_OFFSETS
 
-  def _reset_goal(self):
-    """Reset goal location for flagrun."""
-    try:
-      if self.goal_id is not None: 
-        self._pybullet_client.removeBody(self.goal_id)
-    except:
-      pass
-    
-    if self._test_flagrun:
-      self._goal_location = np.array([self.goal_x[self._goal_idx], 
-                                      self.goal_y[self._goal_idx]])
-      self._goal_idx = min(self._goal_idx+1, len(self.goal_x))
-    else:
-      self._goal_location = 6 * (np.random.random((2,)) - 0.5) 
-      self._goal_location += self.robot.GetBasePosition()[0:2]
-    
-    sh_colBox = self._pybullet_client.createCollisionShape(self._pybullet_client.GEOM_BOX,
-        halfExtents=[0.2,0.2,0.2])
-    orn = self._pybullet_client.getQuaternionFromEuler([0,0,0])
-    self.goal_id=self._pybullet_client.createMultiBody(
-                          baseMass=0,
-                          baseCollisionShapeIndex = sh_colBox,
-                          basePosition = [self._goal_location[0],self._goal_location[1],0.6],
-                          baseOrientation=orn)
-    # print('goal is at ', self._goal_location)
+        for _ in range(1000):
+            self.robot.ApplyAction(init_motor_angles)
 
-  def _settle_robot(self):
-    """ Settle robot and add noise to init configuration. """
-    # change to PD control mode to set initial position, then set back..
-    tmp_save_motor_control_mode_ENV = self._motor_control_mode
-    tmp_save_motor_control_mode_ROB = self.robot._motor_control_mode
-    self._motor_control_mode = "PD"
-    self.robot._motor_control_mode = "PD"
-    
-    try:
-      tmp_save_motor_control_mode_MOT = self.robot._motor_model._motor_control_mode
-      self.robot._motor_model._motor_control_mode = "PD"
-    except:
-      pass
-    
-    init_motor_angles = self._robot_config.INIT_MOTOR_ANGLES + self._robot_config.JOINT_OFFSETS
-    
-    for _ in range(1000):
-      self.robot.ApplyAction(init_motor_angles)
-      
-      if self._is_render:
-        self._render_step_helper()
-      self._pybullet_client.stepSimulation()
-    
-    # set control mode back
-    self._motor_control_mode = tmp_save_motor_control_mode_ENV
-    self.robot._motor_control_mode = tmp_save_motor_control_mode_ROB
-    try:
-      self.robot._motor_model._motor_control_mode = tmp_save_motor_control_mode_MOT
-    except:
-      pass
+            if self._is_render:
+                self._render_step_helper()
+            self._pybullet_client.stepSimulation()
 
-  ######################################################################################
-  # Render, record videos, bookkeping, and misc pybullet helpers.  
-  ######################################################################################
-  def startRecordingVideo(self,name):
-    self.videoLogID = self._pybullet_client.startStateLogging(
-                            self._pybullet_client.STATE_LOGGING_VIDEO_MP4, 
-                            name)
+        # set control mode back
+        self._motor_control_mode = tmp_save_motor_control_mode_ENV
+        self.robot._motor_control_mode = tmp_save_motor_control_mode_ROB
+        try:
+            self.robot._motor_model._motor_control_mode = tmp_save_motor_control_mode_MOT
+        except:
+            pass
 
-  def stopRecordingVideo(self):
-    self._pybullet_client.stopStateLogging(self.videoLogID)
+    ######################################################################################
+    # Render, record videos, bookkeping, and misc pybullet helpers.
+    ######################################################################################
+    def startRecordingVideo(self, name):
+        self.videoLogID = self._pybullet_client.startStateLogging(self._pybullet_client.STATE_LOGGING_VIDEO_MP4, name)
 
-  def close(self):
-    if self._is_record_video:
-      self.stopRecordingVideo()
-    
-    self._pybullet_client.disconnect()
+    def stopRecordingVideo(self):
+        self._pybullet_client.stopStateLogging(self.videoLogID)
 
-  def recordVideoHelper(self, extra_filename=None):
-    """ Helper to record video, if not already, or end and start a new one """
-    # If no ID, this is the first video, so make a directory and start logging
-    if self.videoLogID == None:
-      directoryName = VIDEO_LOG_DIRECTORY
-      assert isinstance(directoryName, str)
-      os.makedirs(directoryName, exist_ok=True)
-      self.videoDirectory = directoryName
-    else:
-      # stop recording and record a new one
-      self.stopRecordingVideo()
+    def close(self):
+        if self._is_record_video:
+            self.stopRecordingVideo()
 
-    if extra_filename is not None:
-      output_video_filename = self.videoDirectory + '/' + datetime.datetime.now().strftime("vid-%Y-%m-%d-%H-%M-%S-%f") +extra_filename+ ".MP4"
-    else:
-      output_video_filename = self.videoDirectory + '/' + datetime.datetime.now().strftime("vid-%Y-%m-%d-%H-%M-%S-%f") + ".MP4"
-    
-    logID = self.startRecordingVideo(output_video_filename)
-    self.videoLogID = logID
+        self._pybullet_client.disconnect()
 
-  def configure(self, args):
-    self._args = args
+    def recordVideoHelper(self, extra_filename=None):
+        """Helper to record video, if not already, or end and start a new one"""
+        # If no ID, this is the first video, so make a directory and start logging
+        if self.videoLogID == None:
+            directoryName = VIDEO_LOG_DIRECTORY
+            assert isinstance(directoryName, str)
+            os.makedirs(directoryName, exist_ok=True)
+            self.videoDirectory = directoryName
+        else:
+            # stop recording and record a new one
+            self.stopRecordingVideo()
 
-  def seed(self, seed=None):
-    self.np_random, seed = seeding.np_random(seed)
-    return [seed]
+        if extra_filename is not None:
+            output_video_filename = (
+                self.videoDirectory + "/" + datetime.datetime.now().strftime("vid-%Y-%m-%d-%H-%M-%S-%f") + extra_filename + ".MP4"
+            )
+        else:
+            output_video_filename = self.videoDirectory + "/" + datetime.datetime.now().strftime("vid-%Y-%m-%d-%H-%M-%S-%f") + ".MP4"
 
-  def _render_step_helper(self):
-    """ Helper to configure the visualizer camera during step(). """
-    # Sleep, otherwise the computation takes less time than real time,
-    # which will make the visualization like a fast-forward video.
-    current_time = time.monotonic()
-    elapsed = current_time - self._last_frame_time
-    self._last_frame_time = current_time
-    time_diff = max(0, self._time_step - elapsed)
-    if time_diff > 0:
-      time.sleep(time_diff)
+        logID = self.startRecordingVideo(output_video_filename)
+        self.videoLogID = logID
 
-    base_pos = self.robot.GetBasePosition()
-    camInfo = self._pybullet_client.getDebugVisualizerCamera()
-    curTargetPos = camInfo[11]
-    distance = camInfo[10]
-    yaw = camInfo[8]
-    pitch = camInfo[9]
-    targetPos = [
-        0.95 * curTargetPos[0] + 0.05 * base_pos[0], 0.95 * curTargetPos[1] + 0.05 * base_pos[1],
-        curTargetPos[2]
-    ]
-    self._pybullet_client.resetDebugVisualizerCamera(distance, yaw, pitch, base_pos)
+    def configure(self, args):
+        self._args = args
 
-  def _configure_visualizer(self):
-    """ Remove all visualizer borders, and zoom in """
-    # default rendering options
-    self._render_width = 960
-    self._render_height = 720
-    self._cam_dist = 1.0 
-    self._cam_yaw = 0
-    self._cam_pitch = -30 
-    
-    # get rid of visualizer things
-    self._pybullet_client.configureDebugVisualizer(self._pybullet_client.COV_ENABLE_RGB_BUFFER_PREVIEW,0)
-    self._pybullet_client.configureDebugVisualizer(self._pybullet_client.COV_ENABLE_DEPTH_BUFFER_PREVIEW,0)
-    self._pybullet_client.configureDebugVisualizer(self._pybullet_client.COV_ENABLE_SEGMENTATION_MARK_PREVIEW,0)
-    self._pybullet_client.configureDebugVisualizer(self._pybullet_client.COV_ENABLE_GUI,0)
+    def seed(self, seed=None):
+        self.np_random, seed = seeding.np_random(seed)
+        return [seed]
 
-  def render(self, mode="rgb_array", close=False):
-    if mode != "rgb_array":
-      return np.array([])
-    
-    base_pos = self.robot.GetBasePosition()
-    view_matrix = self._pybullet_client.computeViewMatrixFromYawPitchRoll(
-        cameraTargetPosition=base_pos,
-        distance=self._cam_dist,
-        yaw=self._cam_yaw,
-        pitch=self._cam_pitch,
-        roll=0,
-        upAxisIndex=2)
-    proj_matrix = self._pybullet_client.computeProjectionMatrixFOV(fov=60,
-                                                                   aspect=float(self._render_width) /
-                                                                   self._render_height,
-                                                                   nearVal=0.1,
-                                                                   farVal=100.0)
-    (_, _, px, _,
-     _) = self._pybullet_client.getCameraImage(width=self._render_width,
-                                               height=self._render_height,
-                                               viewMatrix=view_matrix,
-                                               projectionMatrix=proj_matrix,
-                                               renderer=pybullet.ER_BULLET_HARDWARE_OPENGL)
-    rgb_array = np.array(px)
-    rgb_array = rgb_array[:, :, :3]
-    return rgb_array
+    def _render_step_helper(self):
+        """Helper to configure the visualizer camera during step()."""
+        # Sleep, otherwise the computation takes less time than real time,
+        # which will make the visualization like a fast-forward video.
+        current_time = time.monotonic()
+        elapsed = current_time - self._last_frame_time
+        self._last_frame_time = current_time
+        time_diff = max(0, self._time_step - elapsed)
+        if time_diff > 0:
+            time.sleep(time_diff)
 
-  def addLine(self,lineFromXYZ,lineToXYZ,lifeTime=0,color=[1,0,0]):
-    """ Add line between point A and B for duration lifeTime"""
-    self._pybullet_client.addUserDebugLine(lineFromXYZ,
-                                            lineToXYZ,
-                                            lineColorRGB=color,
-                                            lifeTime=lifeTime)
+        base_pos = self.robot.GetBasePosition()
+        camInfo = self._pybullet_client.getDebugVisualizerCamera()
+        curTargetPos = camInfo[11]
+        distance = camInfo[10]
+        yaw = camInfo[8]
+        pitch = camInfo[9]
+        targetPos = [0.95 * curTargetPos[0] + 0.05 * base_pos[0], 0.95 * curTargetPos[1] + 0.05 * base_pos[1], curTargetPos[2]]
+        self._pybullet_client.resetDebugVisualizerCamera(distance, yaw, pitch, base_pos)
 
-  def get_sim_time(self):
-    """ Get current simulation time. """
-    return self._sim_step_counter * self._time_step
+    def _configure_visualizer(self):
+        """Remove all visualizer borders, and zoom in"""
+        # default rendering options
+        self._render_width = 960
+        self._render_height = 720
+        self._cam_dist = 1.0
+        self._cam_yaw = 0
+        self._cam_pitch = -30
 
-  def scale_rand(self,num_rand,low,high):
-    """ scale number of rand numbers between low and high """
-    return low + np.random.random(num_rand) * (high - low)
+        # get rid of visualizer things
+        self._pybullet_client.configureDebugVisualizer(self._pybullet_client.COV_ENABLE_RGB_BUFFER_PREVIEW, 0)
+        self._pybullet_client.configureDebugVisualizer(self._pybullet_client.COV_ENABLE_DEPTH_BUFFER_PREVIEW, 0)
+        self._pybullet_client.configureDebugVisualizer(self._pybullet_client.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, 0)
+        self._pybullet_client.configureDebugVisualizer(self._pybullet_client.COV_ENABLE_GUI, 0)
 
-  def add_random_boxes(self, num_rand=100, z_height=0.04):
-    """Add random boxes in front of the robot in x [0.5, 20] and y [-3,3] """
-    # x location
-    x_low, x_upp = 0.5, 20
-    
-    # y location
-    y_low, y_upp = -3, 3
-    
-    # z location
-    z_low, z_upp = 0.005, z_height
+    def render(self, mode="rgb_array", close=False):
+        if mode != "rgb_array":
+            return np.array([])
 
-    # block dimensions
-    block_x_min, block_x_max = 0.1, 1
-    block_y_min, block_y_max = 0.1, 1
-    
-    # block orientations
-    roll_low, roll_upp = -0.01, 0.01
-    pitch_low, pitch_upp = -0.01, 0.01 
-    yaw_low, yaw_upp = -np.pi, np.pi
+        base_pos = self.robot.GetBasePosition()
+        view_matrix = self._pybullet_client.computeViewMatrixFromYawPitchRoll(
+            cameraTargetPosition=base_pos, distance=self._cam_dist, yaw=self._cam_yaw, pitch=self._cam_pitch, roll=0, upAxisIndex=2
+        )
+        proj_matrix = self._pybullet_client.computeProjectionMatrixFOV(
+            fov=60, aspect=float(self._render_width) / self._render_height, nearVal=0.1, farVal=100.0
+        )
+        (_, _, px, _, _) = self._pybullet_client.getCameraImage(
+            width=self._render_width,
+            height=self._render_height,
+            viewMatrix=view_matrix,
+            projectionMatrix=proj_matrix,
+            renderer=pybullet.ER_BULLET_HARDWARE_OPENGL,
+        )
+        rgb_array = np.array(px)
+        rgb_array = rgb_array[:, :, :3]
+        return rgb_array
 
-    x = x_low + np.random.random(num_rand) * (x_upp - x_low)
-    y = y_low + np.random.random(num_rand) * (y_upp - y_low)
-    z = z_low + np.random.random(num_rand) * (z_upp - z_low)
-    block_x = self.scale_rand(num_rand,block_x_min,block_x_max)
-    block_y = self.scale_rand(num_rand,block_y_min,block_y_max)
-    roll = self.scale_rand(num_rand,roll_low,roll_upp)
-    pitch = self.scale_rand(num_rand,pitch_low,pitch_upp)
-    yaw = self.scale_rand(num_rand,yaw_low,yaw_upp)
-    
-    # loop through
-    for i in range(num_rand):
-      sh_colBox = self._pybullet_client.createCollisionShape(self._pybullet_client.GEOM_BOX,
-          halfExtents=[block_x[i]/2,block_y[i]/2,z[i]/2])
-      orn = self._pybullet_client.getQuaternionFromEuler([roll[i],pitch[i],yaw[i]])
-      block2=self._pybullet_client.createMultiBody(baseMass=0,baseCollisionShapeIndex = sh_colBox,
-                            basePosition = [x[i],y[i],z[i]/2],baseOrientation=orn)
-      # set friction coeff
-      self._pybullet_client.changeDynamics(block2, -1, lateralFriction=self._ground_mu_k)
+    def addLine(self, lineFromXYZ, lineToXYZ, lifeTime=0, color=[1, 0, 0]):
+        """Add line between point A and B for duration lifeTime"""
+        self._pybullet_client.addUserDebugLine(lineFromXYZ, lineToXYZ, lineColorRGB=color, lifeTime=lifeTime)
 
-    # add walls 
-    orn = self._pybullet_client.getQuaternionFromEuler([0,0,0])
-    sh_colBox = self._pybullet_client.createCollisionShape(self._pybullet_client.GEOM_BOX,
-        halfExtents=[x_upp/2,0.5,0.5])
-    block2=self._pybullet_client.createMultiBody(baseMass=0,baseCollisionShapeIndex = sh_colBox,
-                          basePosition = [x_upp/2,y_low,0.5],baseOrientation=orn)
-    block2=self._pybullet_client.createMultiBody(baseMass=0,baseCollisionShapeIndex = sh_colBox,
-                          basePosition = [x_upp/2,-y_low,0.5],baseOrientation=orn)
+    def get_sim_time(self):
+        """Get current simulation time."""
+        return self._sim_step_counter * self._time_step
 
-  def add_gaps(self, num_gaps=5, gap_width=0.1, between_gaps_width=2):
-    """Add N gaps
-      -each gap is gap_width wide
-      -platforms between gaps are between_gaps_width wide"""
-    orn = self._pybullet_client.getQuaternionFromEuler([0,0,0])
-    
-    # start platform
-    sh_colBox = self._pybullet_client.createCollisionShape(self._pybullet_client.GEOM_BOX,
-            halfExtents=[2,1,0.5])
-    block2=self._pybullet_client.createMultiBody(baseMass=0,baseCollisionShapeIndex = sh_colBox,
-                              basePosition = [0,0,0.5],baseOrientation=orn)
-    
-    # set friction coeff to 1
-    self._pybullet_client.changeDynamics(block2, -1, lateralFriction=self._ground_mu_k)
-    first_gap = 2
-    block_0 = first_gap + gap_width + between_gaps_width / 2
-    
-    # keep track of gaps (possibly for RL observation space!)
-    self._gap_centers = np.zeros(num_gaps) 
+    def scale_rand(self, num_rand, low, high):
+        """scale number of rand numbers between low and high"""
+        return low + np.random.random(num_rand) * (high - low)
 
-    # loop through
-    for i in range(num_gaps):
-      self._gap_centers[i] = first_gap + gap_width / 2 + i*between_gaps_width
-      block_x = block_0 + i * (gap_width + between_gaps_width)   
-      sh_colBox = self._pybullet_client.createCollisionShape(self._pybullet_client.GEOM_BOX,
-          halfExtents=[between_gaps_width / 2, 1, 0.5])
-      block2=self._pybullet_client.createMultiBody(baseMass=0,baseCollisionShapeIndex = sh_colBox,
-                            basePosition = [block_x,0,0.5],baseOrientation=orn)
-    
-      # set friction coeff to 1
-      self._pybullet_client.changeDynamics(block2, -1, lateralFriction=self._ground_mu_k)
-    # print("gaps are centered at", self._gap_centers)
+    def add_random_boxes(self, num_rand=100, z_height=0.04):
+        """Add random boxes in front of the robot in x [0.5, 20] and y [-3,3]"""
+        # x location
+        x_low, x_upp = 0.5, 20
 
-    # end platform 
-    end_platform_size = 2
-    sh_colBox = self._pybullet_client.createCollisionShape(self._pybullet_client.GEOM_BOX,
-            halfExtents=[end_platform_size,1,0.5])
-    block2=self._pybullet_client.createMultiBody(baseMass=0,baseCollisionShapeIndex = sh_colBox,
-                              basePosition = [block_x+between_gaps_width/2+end_platform_size/2,0,0.5],baseOrientation=orn)
-    
-    # set friction coeff to 1
-    self._pybullet_client.changeDynamics(block2, -1, lateralFriction=self._ground_mu_k)
-  
-  def add_stairs(self, num_stairs=12, stair_height=0.05, stair_width=0.25):
-    """Add N stairs, with stair_height and stair_width. long so can't get around """
-    x_upp = 20
-    y_low = -3
-    y = 6
-    curr_z = 0 
-    block_x = stair_width * np.ones(num_stairs)
-    curr_x = 1
-    
-    # loop through
-    for i in range(num_stairs):
-      if i < num_stairs / 2:
-        curr_z += stair_height
-      else:
-        curr_z -= stair_height
-      
-      if curr_z > 0:
-        sh_colBox = self._pybullet_client.createCollisionShape(self._pybullet_client.GEOM_BOX,
-            halfExtents=[block_x[i]/2,y/2,curr_z/2])
-        orn = self._pybullet_client.getQuaternionFromEuler([0,0,0])
-        block2=self._pybullet_client.createMultiBody(baseMass=0,baseCollisionShapeIndex = sh_colBox,
-                              basePosition = [curr_x,0,curr_z/2],baseOrientation=orn)
-        
+        # y location
+        y_low, y_upp = -3, 3
+
+        # z location
+        z_low, z_upp = 0.005, z_height
+
+        # block dimensions
+        block_x_min, block_x_max = 0.1, 1
+        block_y_min, block_y_max = 0.1, 1
+
+        # block orientations
+        roll_low, roll_upp = -0.01, 0.01
+        pitch_low, pitch_upp = -0.01, 0.01
+        yaw_low, yaw_upp = -np.pi, np.pi
+
+        x = x_low + np.random.random(num_rand) * (x_upp - x_low)
+        y = y_low + np.random.random(num_rand) * (y_upp - y_low)
+        z = z_low + np.random.random(num_rand) * (z_upp - z_low)
+        block_x = self.scale_rand(num_rand, block_x_min, block_x_max)
+        block_y = self.scale_rand(num_rand, block_y_min, block_y_max)
+        roll = self.scale_rand(num_rand, roll_low, roll_upp)
+        pitch = self.scale_rand(num_rand, pitch_low, pitch_upp)
+        yaw = self.scale_rand(num_rand, yaw_low, yaw_upp)
+
+        # loop through
+        for i in range(num_rand):
+            sh_colBox = self._pybullet_client.createCollisionShape(
+                self._pybullet_client.GEOM_BOX, halfExtents=[block_x[i] / 2, block_y[i] / 2, z[i] / 2]
+            )
+            orn = self._pybullet_client.getQuaternionFromEuler([roll[i], pitch[i], yaw[i]])
+            block2 = self._pybullet_client.createMultiBody(
+                baseMass=0, baseCollisionShapeIndex=sh_colBox, basePosition=[x[i], y[i], z[i] / 2], baseOrientation=orn
+            )
+            # set friction coeff
+            self._pybullet_client.changeDynamics(block2, -1, lateralFriction=self._ground_mu_k)
+
+        # add walls
+        orn = self._pybullet_client.getQuaternionFromEuler([0, 0, 0])
+        sh_colBox = self._pybullet_client.createCollisionShape(self._pybullet_client.GEOM_BOX, halfExtents=[x_upp / 2, 0.5, 0.5])
+        block2 = self._pybullet_client.createMultiBody(
+            baseMass=0, baseCollisionShapeIndex=sh_colBox, basePosition=[x_upp / 2, y_low, 0.5], baseOrientation=orn
+        )
+        block2 = self._pybullet_client.createMultiBody(
+            baseMass=0, baseCollisionShapeIndex=sh_colBox, basePosition=[x_upp / 2, -y_low, 0.5], baseOrientation=orn
+        )
+
+    def add_gaps(self, num_gaps=5, gap_width=0.1, between_gaps_width=2):
+        """Add N gaps
+        -each gap is gap_width wide
+        -platforms between gaps are between_gaps_width wide"""
+        orn = self._pybullet_client.getQuaternionFromEuler([0, 0, 0])
+
+        # start platform
+        sh_colBox = self._pybullet_client.createCollisionShape(self._pybullet_client.GEOM_BOX, halfExtents=[2, 1, 0.5])
+        block2 = self._pybullet_client.createMultiBody(
+            baseMass=0, baseCollisionShapeIndex=sh_colBox, basePosition=[0, 0, 0.5], baseOrientation=orn
+        )
+
+        # set friction coeff to 1
+        self._pybullet_client.changeDynamics(block2, -1, lateralFriction=self._ground_mu_k)
+        first_gap = 2
+        block_0 = first_gap + gap_width + between_gaps_width / 2
+
+        # keep track of gaps (possibly for RL observation space!)
+        self._gap_centers = np.zeros(num_gaps)
+
+        # loop through
+        for i in range(num_gaps):
+            self._gap_centers[i] = first_gap + gap_width / 2 + i * between_gaps_width
+            block_x = block_0 + i * (gap_width + between_gaps_width)
+            sh_colBox = self._pybullet_client.createCollisionShape(
+                self._pybullet_client.GEOM_BOX, halfExtents=[between_gaps_width / 2, 1, 0.5]
+            )
+            block2 = self._pybullet_client.createMultiBody(
+                baseMass=0, baseCollisionShapeIndex=sh_colBox, basePosition=[block_x, 0, 0.5], baseOrientation=orn
+            )
+
+            # set friction coeff to 1
+            self._pybullet_client.changeDynamics(block2, -1, lateralFriction=self._ground_mu_k)
+        # print("gaps are centered at", self._gap_centers)
+
+        # end platform
+        end_platform_size = 2
+        sh_colBox = self._pybullet_client.createCollisionShape(self._pybullet_client.GEOM_BOX, halfExtents=[end_platform_size, 1, 0.5])
+        block2 = self._pybullet_client.createMultiBody(
+            baseMass=0,
+            baseCollisionShapeIndex=sh_colBox,
+            basePosition=[block_x + between_gaps_width / 2 + end_platform_size / 2, 0, 0.5],
+            baseOrientation=orn,
+        )
+
         # set friction coeff to 1
         self._pybullet_client.changeDynamics(block2, -1, lateralFriction=self._ground_mu_k)
 
-      curr_x += block_x[i]
+    def add_stairs(self, num_stairs=12, stair_height=0.05, stair_width=0.25):
+        """Add N stairs, with stair_height and stair_width. long so can't get around"""
+        x_upp = 20
+        y_low = -3
+        y = 6
+        curr_z = 0
+        block_x = stair_width * np.ones(num_stairs)
+        curr_x = 1
 
-    # add walls 
-    orn = self._pybullet_client.getQuaternionFromEuler([0,0,0])
-    sh_colBox = self._pybullet_client.createCollisionShape(self._pybullet_client.GEOM_BOX,
-        halfExtents=[x_upp/2,0.5,0.5])
-    block2=self._pybullet_client.createMultiBody(baseMass=0,baseCollisionShapeIndex = sh_colBox,
-                          basePosition = [x_upp/2,y_low,0.5],baseOrientation=orn)
-    block2=self._pybullet_client.createMultiBody(baseMass=0,baseCollisionShapeIndex = sh_colBox,
-                          basePosition = [x_upp/2,-y_low,0.5],baseOrientation=orn)
+        # loop through
+        for i in range(num_stairs):
+            if i < num_stairs / 2:
+                curr_z += stair_height
+            else:
+                curr_z -= stair_height
 
-  def add_slopes(self):
-    """Add slopes with platform in center."""
-    y = 6
-    slope_len = 2
-    box_width = 1
-    slope_height = 0.01
+            if curr_z > 0:
+                sh_colBox = self._pybullet_client.createCollisionShape(
+                    self._pybullet_client.GEOM_BOX, halfExtents=[block_x[i] / 2, y / 2, curr_z / 2]
+                )
+                orn = self._pybullet_client.getQuaternionFromEuler([0, 0, 0])
+                block2 = self._pybullet_client.createMultiBody(
+                    baseMass=0, baseCollisionShapeIndex=sh_colBox, basePosition=[curr_x, 0, curr_z / 2], baseOrientation=orn
+                )
 
-    # add first slope UP
-    sh_colBox = self._pybullet_client.createCollisionShape(self._pybullet_client.GEOM_BOX,
-        halfExtents=[slope_len/2,y/2,slope_height])
-    orn = self._pybullet_client.getQuaternionFromEuler([0,-self.slope_pitch,0])
-    block2=self._pybullet_client.createMultiBody(baseMass=0,baseCollisionShapeIndex=sh_colBox,
-        basePosition = [1+slope_len/2,0,slope_len/2*np.sin(self.slope_pitch) - slope_height*np.cos(self.slope_pitch) ],baseOrientation=orn)
-    self._pybullet_client.changeDynamics(block2, -1, lateralFriction=self._ground_mu_k)
+                # set friction coeff to 1
+                self._pybullet_client.changeDynamics(block2, -1, lateralFriction=self._ground_mu_k)
 
-    # add middle box
-    sh_colBox = self._pybullet_client.createCollisionShape(self._pybullet_client.GEOM_BOX,
-        halfExtents=[box_width/2,y/2,slope_len/2*np.sin(self.slope_pitch)])
-    orn = self._pybullet_client.getQuaternionFromEuler([0,0,0])
-    block2=self._pybullet_client.createMultiBody(baseMass=0,baseCollisionShapeIndex=sh_colBox,
-        basePosition = [1+slope_len*np.cos(self.slope_pitch)+box_width/2,0,slope_len/2*np.sin(self.slope_pitch)  ],baseOrientation=orn) # + slope_height/2*np.cos(self.slope_pitch)
-    self._pybullet_client.changeDynamics(block2, -1, lateralFriction=self._ground_mu_k)
+            curr_x += block_x[i]
 
-    # add descending box
-    sh_colBox = self._pybullet_client.createCollisionShape(self._pybullet_client.GEOM_BOX,
-        halfExtents=[slope_len/2,y/2,slope_height])
-    orn = self._pybullet_client.getQuaternionFromEuler([0,self.slope_pitch,0])
-    block2=self._pybullet_client.createMultiBody(baseMass=0,baseCollisionShapeIndex=sh_colBox,
-        basePosition = [1+slope_len*np.cos(self.slope_pitch)+box_width + slope_len/2 + 2*slope_height*np.sin(-self.slope_pitch),0,slope_len/2*np.sin(self.slope_pitch) - slope_height*np.cos(self.slope_pitch) ],baseOrientation=orn) # + slope_height/2*np.cos(self.slope_pitch)
-    self._pybullet_client.changeDynamics(block2, -1, lateralFriction=self._ground_mu_k)
-    self._add_walls()
+        # add walls
+        orn = self._pybullet_client.getQuaternionFromEuler([0, 0, 0])
+        sh_colBox = self._pybullet_client.createCollisionShape(self._pybullet_client.GEOM_BOX, halfExtents=[x_upp / 2, 0.5, 0.5])
+        block2 = self._pybullet_client.createMultiBody(
+            baseMass=0, baseCollisionShapeIndex=sh_colBox, basePosition=[x_upp / 2, y_low, 0.5], baseOrientation=orn
+        )
+        block2 = self._pybullet_client.createMultiBody(
+            baseMass=0, baseCollisionShapeIndex=sh_colBox, basePosition=[x_upp / 2, -y_low, 0.5], baseOrientation=orn
+        )
 
-  def _add_walls(self,x_upp=20,y_low=-3):
-    # add walls 
-    orn = self._pybullet_client.getQuaternionFromEuler([0,0,0])
-    sh_colBox = self._pybullet_client.createCollisionShape(self._pybullet_client.GEOM_BOX,
-        halfExtents=[x_upp/2,0.25,0.5])
-    block2=self._pybullet_client.createMultiBody(baseMass=0,baseCollisionShapeIndex = sh_colBox,
-                          basePosition = [x_upp/2,y_low,0.5],baseOrientation=orn)
-    block2=self._pybullet_client.createMultiBody(baseMass=0,baseCollisionShapeIndex = sh_colBox,
-                          basePosition = [x_upp/2,-y_low,0.5],baseOrientation=orn)
+    def add_slopes(self):
+        """Add slopes with platform in center."""
+        y = 6
+        slope_len = 2
+        box_width = 1
+        slope_height = 0.01
 
-  def _add_base_mass_offset(self, spec_mass=None, spec_location=None):
-    """Attach mass to robot base."""
-    quad_base = np.array(self.robot.GetBasePosition())
-    quad_ID = self.robot.quadruped
-    offset_low = np.array([-0.15, -0.05, -0.05])
-    offset_upp = np.array([ 0.15,  0.05,  0.05])
-    
-    if spec_location is None:
-      block_pos_delta_base_frame = self.scale_rand(3,offset_low,offset_upp)
-    else:
-      block_pos_delta_base_frame = np.array(spec_location)
-    
-    if spec_mass is None:
-      base_mass = 8*np.random.random()
-    else:
-      base_mass = spec_mass
-    
-    if self._is_render:
-      print('=========================== Random Mass:')
-      print('Mass:', base_mass, 'location:', block_pos_delta_base_frame)
-      # if rendering, also want to set the halfExtents accordingly 
-      # 1 kg water is 0.001 cubic meters 
-      boxSizeHalf = [(base_mass*0.001)**(1/3) / 2]*3
-      translationalOffset = [0,0,0.1]
-    else:
-      boxSizeHalf = [0.05]*3
-      translationalOffset = [0]*3
+        # add first slope UP
+        sh_colBox = self._pybullet_client.createCollisionShape(
+            self._pybullet_client.GEOM_BOX, halfExtents=[slope_len / 2, y / 2, slope_height]
+        )
+        orn = self._pybullet_client.getQuaternionFromEuler([0, -self.slope_pitch, 0])
+        block2 = self._pybullet_client.createMultiBody(
+            baseMass=0,
+            baseCollisionShapeIndex=sh_colBox,
+            basePosition=[1 + slope_len / 2, 0, slope_len / 2 * np.sin(self.slope_pitch) - slope_height * np.cos(self.slope_pitch)],
+            baseOrientation=orn,
+        )
+        self._pybullet_client.changeDynamics(block2, -1, lateralFriction=self._ground_mu_k)
 
-    sh_colBox = self._pybullet_client.createCollisionShape(self._pybullet_client.GEOM_BOX, 
-                      halfExtents=boxSizeHalf, collisionFramePosition=translationalOffset)  
-    base_block_ID=self._pybullet_client.createMultiBody(baseMass=base_mass,
-                                    baseCollisionShapeIndex = sh_colBox,
-                                    basePosition = quad_base + block_pos_delta_base_frame,
-                                    baseOrientation=[0,0,0,1])
-    cid = self._pybullet_client.createConstraint(quad_ID, -1, base_block_ID, -1, 
-          self._pybullet_client.JOINT_FIXED, [0, 0, 0], [0, 0, 0], -block_pos_delta_base_frame)
-    
-    # disable self collision between box and each link
-    for i in range(-1,self._pybullet_client.getNumJoints(quad_ID)):
-      self._pybullet_client.setCollisionFilterPair(quad_ID,base_block_ID, i,-1, 0)
+        # add middle box
+        sh_colBox = self._pybullet_client.createCollisionShape(
+            self._pybullet_client.GEOM_BOX, halfExtents=[box_width / 2, y / 2, slope_len / 2 * np.sin(self.slope_pitch)]
+        )
+        orn = self._pybullet_client.getQuaternionFromEuler([0, 0, 0])
+        block2 = self._pybullet_client.createMultiBody(
+            baseMass=0,
+            baseCollisionShapeIndex=sh_colBox,
+            basePosition=[1 + slope_len * np.cos(self.slope_pitch) + box_width / 2, 0, slope_len / 2 * np.sin(self.slope_pitch)],
+            baseOrientation=orn,
+        )  # + slope_height/2*np.cos(self.slope_pitch)
+        self._pybullet_client.changeDynamics(block2, -1, lateralFriction=self._ground_mu_k)
+
+        # add descending box
+        sh_colBox = self._pybullet_client.createCollisionShape(
+            self._pybullet_client.GEOM_BOX, halfExtents=[slope_len / 2, y / 2, slope_height]
+        )
+        orn = self._pybullet_client.getQuaternionFromEuler([0, self.slope_pitch, 0])
+        block2 = self._pybullet_client.createMultiBody(
+            baseMass=0,
+            baseCollisionShapeIndex=sh_colBox,
+            basePosition=[
+                1 + slope_len * np.cos(self.slope_pitch) + box_width + slope_len / 2 + 2 * slope_height * np.sin(-self.slope_pitch),
+                0,
+                slope_len / 2 * np.sin(self.slope_pitch) - slope_height * np.cos(self.slope_pitch),
+            ],
+            baseOrientation=orn,
+        )  # + slope_height/2*np.cos(self.slope_pitch)
+        self._pybullet_client.changeDynamics(block2, -1, lateralFriction=self._ground_mu_k)
+        self._add_walls()
+
+    def _add_walls(self, x_upp=20, y_low=-3):
+        # add walls
+        orn = self._pybullet_client.getQuaternionFromEuler([0, 0, 0])
+        sh_colBox = self._pybullet_client.createCollisionShape(self._pybullet_client.GEOM_BOX, halfExtents=[x_upp / 2, 0.25, 0.5])
+        block2 = self._pybullet_client.createMultiBody(
+            baseMass=0, baseCollisionShapeIndex=sh_colBox, basePosition=[x_upp / 2, y_low, 0.5], baseOrientation=orn
+        )
+        block2 = self._pybullet_client.createMultiBody(
+            baseMass=0, baseCollisionShapeIndex=sh_colBox, basePosition=[x_upp / 2, -y_low, 0.5], baseOrientation=orn
+        )
+
+    def _add_base_mass_offset(self, spec_mass=None, spec_location=None):
+        """Attach mass to robot base."""
+        quad_base = np.array(self.robot.GetBasePosition())
+        quad_ID = self.robot.quadruped
+        offset_low = np.array([-0.15, -0.05, -0.05])
+        offset_upp = np.array([0.15, 0.05, 0.05])
+
+        if spec_location is None:
+            block_pos_delta_base_frame = self.scale_rand(3, offset_low, offset_upp)
+        else:
+            block_pos_delta_base_frame = np.array(spec_location)
+
+        if spec_mass is None:
+            base_mass = 8 * np.random.random()
+        else:
+            base_mass = spec_mass
+
+        if self._is_render:
+            print("=========================== Random Mass:")
+            print("Mass:", base_mass, "location:", block_pos_delta_base_frame)
+            # if rendering, also want to set the halfExtents accordingly
+            # 1 kg water is 0.001 cubic meters
+            boxSizeHalf = [(base_mass * 0.001) ** (1 / 3) / 2] * 3
+            translationalOffset = [0, 0, 0.1]
+        else:
+            boxSizeHalf = [0.05] * 3
+            translationalOffset = [0] * 3
+
+        sh_colBox = self._pybullet_client.createCollisionShape(
+            self._pybullet_client.GEOM_BOX, halfExtents=boxSizeHalf, collisionFramePosition=translationalOffset
+        )
+        base_block_ID = self._pybullet_client.createMultiBody(
+            baseMass=base_mass,
+            baseCollisionShapeIndex=sh_colBox,
+            basePosition=quad_base + block_pos_delta_base_frame,
+            baseOrientation=[0, 0, 0, 1],
+        )
+        cid = self._pybullet_client.createConstraint(
+            quad_ID, -1, base_block_ID, -1, self._pybullet_client.JOINT_FIXED, [0, 0, 0], [0, 0, 0], -block_pos_delta_base_frame
+        )
+
+        # disable self collision between box and each link
+        for i in range(-1, self._pybullet_client.getNumJoints(quad_ID)):
+            self._pybullet_client.setCollisionFilterPair(quad_ID, base_block_ID, i, -1, 0)
+
 
 def test_env():
-  env = QuadrupedGymEnv(render=True, 
-                        on_rack=True,
-                        motor_control_mode='PD',
-                        action_repeat=100,
-                        )
+    env = QuadrupedGymEnv(
+        render=True,
+        on_rack=True,
+        motor_control_mode="PD",
+        action_repeat=100,
+    )
 
-  obs = env.reset()
-  action_dim = env._action_dim
-  action_low = -np.ones(action_dim)
-  action = action_low.copy()
+    obs = env.reset()
+    action_dim = env._action_dim
+    action_low = -np.ones(action_dim)
+    action = action_low.copy()
 
-  print('obs len', len(obs))
-  print('act len', action_dim)
+    print("obs len", len(obs))
+    print("act len", action_dim)
 
-  while True:
-    action = 2*np.random.rand(action_dim)-1
-    obs, reward, terminated, truncated, info = env.step(action)
+    while True:
+        action = 2 * np.random.rand(action_dim) - 1
+        obs, reward, terminated, truncated, info = env.step(action)
+
 
 if __name__ == "__main__":
-  # test out some functionalities
-  test_env()
-  sys.exit()
+    # test out some functionalities
+    test_env()
+    sys.exit()
