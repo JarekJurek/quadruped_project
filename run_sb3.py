@@ -32,24 +32,6 @@ class CustomCallback(BaseCallback):
     def __init__(self, verbose: int = 0, learning_rate_adaptive=False, target_kl=0.01, 
                  total_timesteps=1000000, terrain_difficulty=1, max_num_stairs=10, difficulty_objective="number", max_step_height=0.05, terrain=None, slope_pitch=0.2):
         super().__init__(verbose)
-        # Those variables will be accessible in the callback
-        # (they are defined in the base class)
-        # The RL model
-        # self.model = None  # type: BaseAlgorithm
-        # An alias for self.model.get_env(), the environment used for training
-        # self.training_env # type: VecEnv
-        # Number of time the callback was called
-        # self.n_calls = 0  # type: int
-        # num_timesteps = n_envs * n times env.step() was called
-        # self.num_timesteps = 0  # type: int
-        # local and global variables
-        # self.locals = {}  # type: Dict[str, Any]
-        # self.globals = {}  # type: Dict[str, Any]
-        # The logger object, used to report things in the terminal
-        # self.logger # type: stable_baselines3.common.logger.Logger
-        # Sometimes, for event callback, it is useful
-        # to have access to the parent object
-        # self.parent = None  # type: Optional[BaseCallback]
         self.learning_rate_adaptive = learning_rate_adaptive
         self.target_kl = target_kl
         self.current_lr = None
@@ -70,18 +52,14 @@ class CustomCallback(BaseCallback):
         if self.terrain_difficulty_levels <= 0:
             return 1
         
-        # Calculate how many steps constitute one "level"
         steps_per_level = self.total_timesteps_train / self.terrain_difficulty_levels
         
-        # Determine current level (1-based index)
         current_level = int(self.num_timesteps / steps_per_level) + 1
         
-        # Clamp to max difficulty
         return min(current_level, self.terrain_difficulty_levels)
 
     def _update_environment_difficulty(self, current_level, max_val, min_val, param_name, aux_params=None):
         """Updates the environment parameter based on the current level."""
-        # Calculate new value linearly
         ratio = current_level / self.terrain_difficulty_levels
         
         if isinstance(max_val, int):
@@ -91,22 +69,18 @@ class CustomCallback(BaseCallback):
             
         new_val = max(min_val, new_val)
 
-        # Only update environment if the value has changed
         if new_val != self.last_set_value:
             if self.verbose > 0:
                 print(f"Curriculum Update at step {self.num_timesteps}: Difficulty Level {current_level}/{self.terrain_difficulty_levels}, {param_name} set to {new_val}")
             
-            # Update the environment variable
             self.training_env.set_attr(param_name, new_val)
             
-            # Set auxiliary parameters if any (e.g. resetting num_stairs when changing height)
             if aux_params:
                 for k, v in aux_params.items():
                     self.training_env.set_attr(k, v)
             
             self.last_set_value = new_val
         
-        # Record curriculum state
         self.logger.record("train/curriculum_level", current_level)
         self.logger.record(f"train/current_{param_name}", new_val)
 
@@ -121,12 +95,9 @@ class CustomCallback(BaseCallback):
         This is triggered before a new rollout starts, which implies
         the previous training phase just finished.
         """
-        # 1. Access the logged KL divergence from the previous update
-        # We use 'train/approx_kl' which SB3 logs automatically
         if "train/approx_kl" in self.logger.name_to_value and self.learning_rate_adaptive:
             current_kl = self.logger.name_to_value["train/approx_kl"]
             
-            # 2. Update Learning Rate based on Target KL logic
             if current_kl > self.target_kl * 2.0:
                 self.current_lr = max(1e-5, self.current_lr / 1.5)
                 if self.verbose > 0:
@@ -137,11 +108,9 @@ class CustomCallback(BaseCallback):
                 if self.verbose > 0:
                     print(f"KL ({current_kl:.4f}) too low. Increasing LR to {self.current_lr:.6f}")
 
-            # 3. Apply the new learning rate to the optimizer
             self._update_learning_rate(self.current_lr)
             self.logger.record("train/learning_rate_adaptive", self.current_lr)
 
-        # Curriculum Learning Logic
         if self.terrain_difficulty_levels > 0:
             current_level = self._get_current_level()
 
@@ -289,13 +258,7 @@ def run_sb3(args):
 
     # checkpoint to save policy network periodically
     checkpoint_callback = CheckpointCallback(save_freq=30000, save_path=save_path,name_prefix='rl_model', verbose=2)
-    
-    # Create wandb callback
-    # wandb_callback = WandbCallback(log_freq=1000, verbose=1)
-    # wandb_callback = WandbCallback(
-    #     gradient_save_freq=100,
-    #     # verbose=1,
-    # )
+
     custom_callback = CustomCallback(
         verbose=2, 
         learning_rate_adaptive=args.learning_rate_adaptive, 
