@@ -484,8 +484,6 @@ class QuadrupedGymEnv(gym.Env):
             # if using the CPG, you can include states with self._cpg.get_r(), for example
             # 50 is arbitrary
 
-            # WE CAN ADD FOOT CONTACT BOOLEANS AND CPG STATES AS ANOTHER OBSERVATION
-
             """
       full observation:
       - body orientation
@@ -601,26 +599,16 @@ class QuadrupedGymEnv(gym.Env):
         yaw_weight=0.5,
         orientation_weight=1.0,
         height_weight=1.0,
-        survival_weight=1.0,
     ):
         """Learn forward locomotion at a desired velocity."""
 
         # Velocity tracking reward
-        actual_vel_x = self.robot.GetBaseLinearVelocity()[0]
-        if des_vel_x is not None:
-            # Exponential reward for velocity tracking
-            vel_tracking_reward = vel_tracking_weight * np.exp(-((actual_vel_x - des_vel_x) ** 2) / 0.25)
-        else:
-            # Reward forward velocity with saturation
-            vel_tracking_reward = vel_tracking_weight * np.clip(actual_vel_x, 0.0, 1.0)
-
         vel_sq_error = (des_vel_x - self.robot.GetBaseLinearVelocity()[0]) ** 2 + (0.0 - self.robot.GetBaseLinearVelocity()[1]) ** 2
-        vel_tracking_reward = np.exp(-vel_sq_error / 0.25)
+        vel_tracking_reward = vel_tracking_weight * np.exp(-vel_sq_error / 0.25)
 
         # Penalize lateral drift
         lateral_vel = self.robot.GetBaseLinearVelocity()[1]
         drift_reward = -drift_weight * lateral_vel**2
-        drift_reward = -drift_weight * np.exp(-((lateral_vel - 0.0) ** 2) / 0.25)
 
         # Penalize yaw deviation (go straight)
         yaw = self.robot.GetBaseOrientationRollPitchYaw()[2]
@@ -629,9 +617,6 @@ class QuadrupedGymEnv(gym.Env):
         # Penalize roll and pitch to maintain upright posture
         roll, pitch, _ = self.robot.GetBaseOrientationRollPitchYaw()
         orientation_penalty = -orientation_weight * (roll**2 + pitch**2)
-
-        base_angular_velocity = self.robot.GetTrueBaseRollPitchYawRate()
-        orientation_penalty = -orientation_weight * np.linalg.norm(base_angular_velocity[:2]) ** 2
 
         # Energy penalty (instantaneous power, not accumulated)
         if self._dt_motor_torques and self._dt_motor_velocities:
@@ -645,59 +630,8 @@ class QuadrupedGymEnv(gym.Env):
         vertical_vel = self.robot.GetBaseLinearVelocity()[2]
         height_reward = -height_weight * vertical_vel**2
 
-        survival_reward = 1.0 * survival_weight
-
         # Total reward
-        reward = vel_tracking_reward + drift_reward + yaw_reward + orientation_penalty + energy_reward + height_reward + survival_reward
-
-        return reward
-
-    def _reward_fwd_locomotion_custom_old(
-        self, des_vel_x=None, disable_drift=False, disable_yaw=False, disable_orientation=False, disable_energy=False
-    ):
-        """Learn forward locomotion at a desired velocity."""
-
-        # Velocity tracking reward
-        actual_vel_x = self.robot.GetBaseLinearVelocity()[0]
-        if des_vel_x is not None:
-            # Exponential reward for velocity tracking
-            vel_tracking_reward = 1.0 * np.exp(-((actual_vel_x - des_vel_x) ** 2) / 0.25)
-        else:
-            # Reward forward velocity with saturation
-            vel_tracking_reward = 1.0 * np.clip(actual_vel_x, 0.0, 1.0)
-
-        # Penalize lateral drift
-        drift_reward = 0.0
-        lateral_vel = self.robot.GetBaseLinearVelocity()[1]
-        if not disable_drift:
-            drift_reward = -0.5 * lateral_vel**2
-
-        # Penalize yaw deviation (go straight)
-        yaw = self.robot.GetBaseOrientationRollPitchYaw()[2]
-        yaw_reward = 0.0
-        if not disable_yaw:
-            yaw_reward = -0.5 * yaw**2
-
-        # Penalize roll and pitch to maintain upright posture
-        roll, pitch, _ = self.robot.GetBaseOrientationRollPitchYaw()
-        orientation_reward = 0.0
-        if not disable_orientation:
-            orientation_reward = -1.0 * (roll**2 + pitch**2)
-
-        # Energy penalty (instantaneous power, not accumulated)
-        if self._dt_motor_torques and self._dt_motor_velocities and not disable_energy:
-            # Use only the most recent timestep
-            instantaneous_power = np.abs(np.dot(self._dt_motor_torques[-1], self._dt_motor_velocities[-1]))
-            energy_reward = -0.001 * instantaneous_power
-        else:
-            energy_reward = 0.0
-
-        # Penalize vertical velocity (should stay at constant height)
-        vertical_vel = self.robot.GetBaseLinearVelocity()[2]
-        height_reward = -1.0 * vertical_vel**2
-
-        # Total reward
-        reward = vel_tracking_reward + drift_reward + yaw_reward + orientation_reward + energy_reward + height_reward
+        reward = vel_tracking_reward + drift_reward + yaw_reward + orientation_penalty + energy_reward + height_reward
 
         return reward
 
@@ -758,93 +692,31 @@ class QuadrupedGymEnv(gym.Env):
 
         return max(reward, 0)  # keep rewards positive
 
-    def _reward_lr_course(self, des_vel_x=None, des_vel_y=0.0, des_yaw_rate=0.0):
-        """Implement your reward function here. How will you improve upon the above?"""
-        # [TODO] add your reward function.
-
-        # vel_tracking_reward = 0.1 * np.clip(self.robot.GetBaseLinearVelocity()[0], 0.2, 1.0)
-        # # If you want to track a desired velocity
-        # if des_vel_x is not None:
-        #   # what about using velocity in the body frame?
-        #   vel_tracking_reward = 0.05 * np.exp( -1/ 0.25 *  (self.robot.GetBaseLinearVelocity()[0] - des_vel_x)**2 )
-
-        def calculate_reward(des_value, measured_value):
-            return np.exp(-1 / 0.25 * (np.linalg.norm(des_value - measured_value)) ** 2)
-
-        x_vel_reward = calculate_reward(des_vel_x, self.robot.GetBaseLinearVelocity()[0])
-
-        y_vel_reward = calculate_reward(des_vel_y, self.robot.GetBaseLinearVelocity()[1])
-
-        angular_velocity_tracking = calculate_reward(des_yaw_rate, self.robot.GetTrueBaseRollPitchYawRate()[2])
-
-        z_vel_penalty = -(self.robot.GetBaseLinearVelocity()[2] ** 2)
-
-        base_angular_velocity = self.robot.GetTrueBaseRollPitchYawRate()
-        omega_xy = base_angular_velocity[:2]  # Extract roll rate and pitch rate (x and y components)
-        angular_velocity_penalty = -(np.linalg.norm(omega_xy) ** 2)
-
-        work_penalty = 0
-        if hasattr(self, "_prev_motor_velocities"):
-            dq_diff = np.array(self._dt_motor_velocities[-1]) - np.array(self._prev_motor_velocities)
-            work_penalty = np.abs(np.dot(self._dt_motor_torques[-1], dq_diff))
-        self._prev_motor_velocities = self._dt_motor_velocities[-1].copy() if self._dt_motor_velocities else np.zeros(12)
-
-        # reward = 0.75 * self._time_step * x_vel_reward \
-        #         + 0.75 * self._time_step * y_vel_reward \
-        #         + 0.5 * self._time_step * angular_velocity_tracking \
-        #         + 2. * self._time_step * z_vel_penalty \
-        #         + 0.05 * self._time_step * angular_velocity_penalty \
-        #         + 0.001 * self._time_step * work_penalty \
-        reward = (
-            0.75 * self._time_step * x_vel_reward
-            + 0.75 * self._time_step * y_vel_reward
-            + 2.0 * self._time_step * z_vel_penalty
-            + 0.001 * self._time_step * work_penalty
-        )
-        return max(reward, 0)  # keep rewards positive
-
     def _reward_eth(self, des_vel_x=0.8, des_vel_y=0.0, des_yaw_rate=0.0):
-        # 1. Linear Velocity Tracking (Corrected to Vector Norm)
-        # Source [548]: phi(v*_xy - v_xy)
         vel_sq_error = (des_vel_x - self.robot.GetBaseLinearVelocity()[0]) ** 2 + (des_vel_y - self.robot.GetBaseLinearVelocity()[1]) ** 2
         lin_vel_reward = np.exp(-vel_sq_error / 0.25)
 
-        # 2. Angular Velocity Tracking
-        # Source [548]: phi(omega*_z - omega_z)
         ang_vel_error = (des_yaw_rate - self.robot.GetTrueBaseRollPitchYawRate()[2]) ** 2
         ang_vel_reward = np.exp(-ang_vel_error / 0.25)
 
-        # 3. Linear Velocity Penalty (z-axis)
-        # Source [548]: -v_{b,z}^2
         linear_vel_penalty = -(self.robot.GetBaseLinearVelocity()[2] ** 2)
 
-        # 4. Angular Velocity Penalty (xy-axes)
-        # Source [548]: -||omega_xy||^2
         base_angular_velocity = self.robot.GetTrueBaseRollPitchYawRate()
         angular_velocity_penalty = -(np.linalg.norm(base_angular_velocity[:2]) ** 2)
 
-        # 5. Joint Motion (Minimize Accel and Vel)
-        # Source [548]: -||q_dot||^2 - ||q_ddot||^2 (inferred from table grouping)
         dq = np.array(self._dt_motor_velocities[-1])
         ddq = np.array(self._dt_motor_accelerations[-1])
         joint_motion = -(np.linalg.norm(ddq) ** 2) - np.linalg.norm(dq) ** 2
 
-        # 6. Joint Torques
-        # Source [548]: -||tau||^2
         torques = np.array(self._dt_motor_torques[-1])
         joint_torques = -(np.linalg.norm(torques) ** 2)
 
-        # 7. Action Rate (Smoothness)
-        # Source [548]: -||a_t - a_{t-1}||^2
-        # Ensure you implemented the _prev_action_for_reward logic in step()
         if hasattr(self, "_prev_action_for_reward"):
             action_diff = self._last_action - self._prev_action_for_reward
             action_rate = -(np.linalg.norm(action_diff) ** 2)
         else:
             action_rate = 0.0
 
-        # Weights from Table 2
-        # Note: lin_vel_reward combines x and y, so we apply the 1.0dt weight once to the vector term.
         reward = (
             1.0 * self._time_step * lin_vel_reward
             + 0.5 * self._time_step * ang_vel_reward
@@ -858,14 +730,6 @@ class QuadrupedGymEnv(gym.Env):
         return reward
 
     def _reward_cpg_rl(self, des_vel_x=None, des_vel_y=0.0, des_yaw_rate=0.0):
-        """
-        Reward function strictly following CPG-RL Paper (Bellegarda et al.).
-        Reference: Section III-C, Page 4.
-        """
-
-        # --- Constants & Weights (from Paper Source 185) ---
-        # The paper lists weights multiplied by dt (0.01).
-        # We use the raw coefficients for per-step reward calculation.
         w_vel_x = 0.75
         w_vel_y = 0.75
         w_yaw = 0.5
@@ -873,62 +737,35 @@ class QuadrupedGymEnv(gym.Env):
         w_ang_pen = 0.05  # Penalty for roll/pitch rates
         w_work_pen = 0.001  # Penalty for energy/work
 
-        # Gaussian Kernel: f(x) = exp(-x^2 / 0.25) [Source 185]
         def gaussian(error, sigma_sq=0.25):
             return np.exp(-(error**2) / sigma_sq)
 
-        # --- 1. Velocity Tracking (Body X) [Positive Reward] ---
-        # "linear velocity tracking, body x direction" [Source 183]
         actual_vel_x = self.robot.GetBaseLinearVelocity()[0]
         if des_vel_x is not None:
             r_vel_x = w_vel_x * gaussian(actual_vel_x - des_vel_x)
         else:
-            # If no command, track 0 or maintain current (paper implies tracking logic)
             r_vel_x = w_vel_x * gaussian(actual_vel_x - 0.0)
 
-        # --- 2. Drift Tracking (Body Y) [Positive Reward] ---
-        # "linear velocity tracking, body y direction" [Source 183]
-        # Rewards keeping lateral velocity near 0.
         actual_vel_y = self.robot.GetBaseLinearVelocity()[1]
         r_vel_y = w_vel_y * gaussian(actual_vel_y - des_vel_y)
 
-        # --- 3. Yaw Rate Tracking [Positive Reward] ---
-        # "angular velocity tracking (body yaw rate)" [Source 183]
         actual_yaw_rate = self.robot.GetBaseAngularVelocity()[2]
         r_yaw = w_yaw * gaussian(actual_yaw_rate - des_yaw_rate)
 
-        # --- 4. Vertical Velocity Penalty [Negative] ---
-        # "linear velocity penalty in body z direction" [Source 183]
-        # Penalizes bouncing.
         actual_vel_z = self.robot.GetBaseLinearVelocity()[2]
         r_z = -w_z_pen * (actual_vel_z**2)
 
-        # --- 5. Angular Rate Penalty (Roll/Pitch) [Negative] ---
-        # "angular velocity penalty... -||w_b,xy||^2" [Source 183]
-        # Note: Penalizes RATES (wobble), not POSITION (tilt).
-        # This prevents the "stiff robot" problem.
         ang_vel = self.robot.GetBaseAngularVelocity()
         w_xy_sq = ang_vel[0] ** 2 + ang_vel[1] ** 2
         r_ang_stab = -w_ang_pen * w_xy_sq
 
-        # --- 6. Work/Energy Penalty [Negative] ---
-        # "work ... -|tau * q_dot|" [Source 184]
-        # Using dot product for instantaneous power
         if self._dt_motor_torques and self._dt_motor_velocities:
             power = np.abs(np.dot(self._dt_motor_torques[-1], self._dt_motor_velocities[-1]))
             r_work = -w_work_pen * power
         else:
             r_work = 0.0
 
-        # --- Summation ---
-        # Because r_vel_y and r_yaw are positive Gaussian terms,
-        # the robot gets ~1.25 reward just for standing still.
-        # This acts as the "Implicit Survival Bonus".
         reward = r_vel_x + r_vel_y + r_yaw + r_z + r_ang_stab + r_work
-
-        # Optional: Explicit Survival Bonus
-        # Uncomment if your robot still terminates early during the first 100 iterations.
-        # reward += 1.0
 
         return reward
 
@@ -946,18 +783,8 @@ class QuadrupedGymEnv(gym.Env):
                 height_weight=self._height_weight,
                 survival_weight=self._survival_weight,
             )
-        elif self._TASK_ENV == "FWD_CUSTOM_OLD":
-            return self._reward_fwd_locomotion_custom_old(
-                des_vel_x=self._des_vel_x,
-                disable_drift=self.disable_drift,
-                disable_yaw=self.disable_yaw,
-                disable_orientation=self.disable_orientation,
-                disable_energy=self.disable_energy,
-            )
         elif self._TASK_ENV == "FWD_BASIC":
             return self._reward_fwd_locomotion_basic()
-        elif self._TASK_ENV == "LR_COURSE_TASK":
-            return self._reward_lr_course(des_vel_x=self._des_vel_x)
         elif self._TASK_ENV == "ETH":
             return self._reward_eth(des_vel_x=self._des_vel_x)
         elif self._TASK_ENV == "CPG_RL":
