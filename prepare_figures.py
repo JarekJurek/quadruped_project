@@ -14,6 +14,8 @@ FILE_PATHS = [
     # "/absolute/path/to/another/file.csv",
 ]
 
+ADD_DES_X = False
+
 # ==========================================
 # PLOTTING SCRIPT
 # ==========================================
@@ -77,7 +79,7 @@ def plot_comparison(file_paths):
                 if 'vel_x' in df.columns: 
                     ax_vel[0].plot(df['time'], df['vel_x'], label=label)
                     # Optional: Plot desired velocity if available (dashed line)
-                    if 'des_vel_x' in df.columns:
+                    if 'des_vel_x' in df.columns and ADD_DES_X:
                         ax_vel[0].plot(df['time'], df['des_vel_x'], linestyle='--', alpha=0.5, label=f"{label} (des)")
                 
                 if 'vel_y' in df.columns: ax_vel[1].plot(df['time'], df['vel_y'], label=label)
