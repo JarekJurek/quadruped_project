@@ -58,6 +58,7 @@ from stable_baselines3.common.vec_env import VecNormalize
 
 # utils
 from env.quadruped_gym_env import QuadrupedGymEnv
+from env.hopf_network import MU_LOW, MU_UPP
 from utils.file_utils import get_latest_model, load_all_results
 from utils.utils import plot_results
 
@@ -90,7 +91,7 @@ def load_sb3(args):
     env_config["enable_vmc"] = args.enable_vmc
     env_config["k_vmc"] = args.k_vmc
     env_config["orientation_weight"] = args.orientation_weight
-    env_config["max_episode_length"] = args.sim_time / 100
+    env_config["max_episode_length"] = 10000000
     env_config["slope_pitch"] = args.slope_pitch
     env_config["randomize_velocity_command"] = args.randomize_velocity_command
 
@@ -102,9 +103,21 @@ def load_sb3(args):
     plot_results([log_dir] , 10e10, 'timesteps', args.learning_alg + ' ')
     plt.show()
 
-    # reconstruct env 
     env = lambda: QuadrupedGymEnv(**env_config)
     env = make_vec_env(env, n_envs=1)
+
+    # Get the actual time step from the environment
+    quad_env = env.envs[0].unwrapped
+    env_dt = quad_env._time_step * quad_env._action_repeat
+    
+    # Calculate number of steps based on sim_time (ms)
+    sim_duration_seconds = args.sim_time / 1000.0
+    num_steps = int(sim_duration_seconds / env_dt)
+    
+    print(f"Simulation duration: {sim_duration_seconds}s")
+    print(f"Environment dt: {env_dt}s")
+    print(f"Total steps: {num_steps}")
+
     env = VecNormalize.load(stats_path, env)
     env.training = False    # do not update stats at test time
     env.norm_reward = False # reward normalization is not needed at test time
@@ -121,26 +134,47 @@ def load_sb3(args):
 
     # [TODO] initialize arrays to save data from simulation 
 
-    base_pos = np.zeros((3, args.sim_time))
-    base_vel = np.zeros((3, args.sim_time))
-    des_vel_x_hist = np.zeros(args.sim_time)
-    t = np.arange(args.sim_time) * 0.001
+    base_pos = np.zeros((3, num_steps))
+    base_vel = np.zeros((3, num_steps))
+    des_vel_x_hist = np.zeros(num_steps)
+    t = np.arange(num_steps) * env_dt
+
+    # CPG data
+    cpg_r_history = np.zeros((4, num_steps))
+    cpg_theta_history = np.zeros((4, num_steps))
+    foot_pos_history = np.zeros((4, 3, num_steps))
 
     cot_history = []
 
     velocity_list = [0.75, 0.35]
 
-    for i in range(args.sim_time):
+    for i in range(num_steps):
 
         if args.randomize_velocity_command:
-            bin_size = args.sim_time // len(velocity_list)
+            bin_size = num_steps // len(velocity_list)
             n = min(i // bin_size, len(velocity_list) - 1)
-            env._des_vel_x = velocity_list[n]
-            print(f"des_vel: {env._des_vel_x }")
+            env.envs[0].unwrapped._des_vel_x = velocity_list[n]
+            print(f"des_vel: {env.envs[0].unwrapped._des_vel_x }")
             print(f"bin_size: {bin_size}")
+
+        if args.randomize_cpg_params:
+            if args.cpg_rand_param == "body_height":
+                param_list = [0.25, 0.3, 0.25]
+                bin_size = num_steps // len(param_list)
+                n = min(i // bin_size, len(param_list) - 1)
+                env.envs[0].unwrapped._cpg._robot_height = param_list[n]
+                print(f"des_h: {env.envs[0].unwrapped._cpg._robot_height }")
+                print(f"bin_size: {bin_size}")
+            else:
+                param_list = [0.04, 0.12, 0.04]
+                bin_size = num_steps // len(param_list)
+                n = min(i // bin_size, len(param_list) - 1)
+                env.envs[0].unwrapped._cpg._ground_clearance = param_list[n]
+                print(f"des_h: {env.envs[0].unwrapped._cpg._ground_clearance }")
+                print(f"bin_size: {bin_size}")
         
-        if hasattr(env, "_des_vel_x"):
-            des_vel_x_hist[i] = env._des_vel_x
+        if hasattr(env.envs[0].unwrapped, "_des_vel_x"):
+            des_vel_x_hist[i] = env.envs[0].unwrapped._des_vel_x
         else:
             des_vel_x_hist[i] = args.des_x_vel
 
@@ -158,6 +192,17 @@ def load_sb3(args):
         robot = env.envs[0].unwrapped.robot
         base_pos[:, i] = robot.GetBasePosition()
         base_vel[:, i] = robot.GetBaseLinearVelocity()
+
+        # Save CPG data
+        quad_env = env.envs[0].unwrapped
+        if hasattr(quad_env, '_cpg'):
+            cpg_r_history[:, i] = quad_env._cpg.X[0, :]
+            cpg_theta_history[:, i] = quad_env._cpg.X[1, :]
+
+        # Save foot positions
+        for leg_i in range(4):
+            _, pos = quad_env.robot.ComputeJacobianAndPosition(leg_i)
+            foot_pos_history[leg_i, :, i] = pos
 
         # [TODO] save data from current robot states for plots 
         # To get base position, for example: env.envs[0].env.robot.GetBasePosition() 
@@ -184,6 +229,44 @@ def load_sb3(args):
         
     # [TODO] make plots
 
+    # Plot CPG states
+    start_time = args.plot_start_time
+    end_time = args.plot_finish_time
+    start_idx = int(start_time / env_dt)
+    end_idx = int(end_time / env_dt)
+    
+    # Check bounds
+    start_idx = max(0, start_idx)
+    end_idx = min(num_steps, end_idx)
+    
+    if start_idx < end_idx:
+        time_range = t[start_idx:end_idx]
+        
+        fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, figsize=(10, 8))
+        legs = ['FR', 'FL', 'RR', 'RL']
+        
+        for i in range(4):
+            ax1.plot(time_range, cpg_r_history[i, start_idx:end_idx], label=legs[i])
+            ax2.plot(time_range, cpg_theta_history[i, start_idx:end_idx], label=legs[i])
+            
+        # ax1.plot(time_range, cpg_r_history[0, start_idx:end_idx], label=legs[0])
+        # ax2.plot(time_range, cpg_theta_history[0, start_idx:end_idx], label=legs[0])
+            
+        ax1.set_ylabel('r')
+        ax1.set_title(f'CPG States ({start_time}s - {end_time}s)')
+        ax1.legend()
+        ax1.grid(True)
+        
+        ax2.set_ylabel('theta')
+        ax2.set_xlabel('Time (s)')
+        ax2.legend()
+        ax2.grid(True)
+        
+        plt.tight_layout()
+        plt.show()
+    else:
+        print(f"Warning: Time range {start_time}s-{end_time}s is outside of simulation duration {args.sim_time * 0.001}s.")
+
     print(f"mean COT: {np.mean(cot_history)}")
 
     data = {
@@ -195,7 +278,15 @@ def load_sb3(args):
         'vel_y': base_vel[1, :],
         'vel_z': base_vel[2, :],
         'des_vel_x': des_vel_x_hist,
-        'cot': cot_history
+        'cot': cot_history,
+        'cpg_r_FR': cpg_r_history[0, :],
+        'cpg_r_FL': cpg_r_history[1, :],
+        'cpg_r_RR': cpg_r_history[2, :],
+        'cpg_r_RL': cpg_r_history[3, :],
+        'cpg_theta_FR': cpg_theta_history[0, :],
+        'cpg_theta_FL': cpg_theta_history[1, :],
+        'cpg_theta_RR': cpg_theta_history[2, :],
+        'cpg_theta_RL': cpg_theta_history[3, :]
     }
 
     model_name = log_dir.split("/")[-1]
@@ -238,6 +329,48 @@ def load_sb3(args):
     plt.tight_layout()
     plt.show()
 
+    # Plot Foot Positions in XZ Plane
+    fig3, axes3 = plt.subplots(2, 2, figsize=(12, 10))
+    fig3.suptitle('Foot Positions in XZ Plane (Leg Frame)', fontsize=16)
+    legs = ['FR', 'FL', 'RR', 'RL']
+    
+    quad_env = env.envs[0].unwrapped
+    cpg = quad_env._cpg
+    
+    # Generate theoretical trajectory (one cycle)
+    theta_cycle = np.linspace(0, 2 * np.pi, 200)
+    # Assuming max amplitude (r = MU_UPP) for the reference shape
+    x_ref = -cpg._max_step_len_rl * (MU_UPP - MU_LOW) * np.cos(theta_cycle)
+    z_ref = np.zeros_like(theta_cycle)
+    
+    for t_idx, th in enumerate(theta_cycle):
+        theta_sin = np.sin(th)
+        if theta_sin > 0:
+            z_ref[t_idx] = -cpg._robot_height + cpg._ground_clearance * theta_sin
+        else:
+            z_ref[t_idx] = -cpg._robot_height + cpg._ground_penetration * theta_sin
+
+    for i in range(4):
+        row = i // 2
+        col = i % 2
+        ax = axes3[row, col]
+        
+        # Actual
+        ax.plot(foot_pos_history[i, 0, :], foot_pos_history[i, 2, :], label='Actual', linewidth=1)
+        
+        # Reference
+        ax.plot(x_ref, z_ref, label='Reference (Max)', linestyle='--', color='black', alpha=0.7)
+        
+        ax.set_title(legs[i])
+        ax.set_xlabel('X [m]')
+        ax.set_ylabel('Z [m]')
+        ax.grid(True, alpha=0.3)
+        ax.legend()
+        ax.set_aspect('equal')
+
+    plt.tight_layout()
+    plt.show()
+
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Quadruped RL training with Stable Baselines 3")
@@ -262,6 +395,9 @@ def parse_arguments():
     parser.add_argument("--kp", type=float, help="kp")
     parser.add_argument("--kd", type=float, help="kd")
 
+    parser.add_argument("--plot_start_time", type=float, default=0.0, help="")
+    parser.add_argument("--plot_finish_time", type=float, default=0.0001, help="")
+
     parser.add_argument("--terrain", type=str, default="NONE", choices=["STAIRS", "SLOPES", "GAPS", "RANDOM", "NONE"], help="Terrain, obstacles")
     parser.add_argument("--num_stairs", type=int, default=12, help="desired h - z of the body")
     parser.add_argument("--stair_height", type=float, default=0.05, help="desired h - z of the body")
@@ -269,6 +405,8 @@ def parse_arguments():
     parser.add_argument("--slope_pitch", type=float, default=0.2, help="")
 
     parser.add_argument("--randomize_velocity_command", action="store_true", help="Whether to randomize velocity commands")
+    parser.add_argument("--randomize_cpg_params", action="store_true", help="")
+    parser.add_argument("--cpg_rand_param", type=str, default="body_height", choices=["foot_height", "body_height"], help="")
 
     parser.add_argument("--learning-alg", type=str, default="PPO", choices=["PPO", "SAC"], help="Learning algorithm to use (default: PPO)")
     parser.add_argument("--motor_control_mode", type=str, default="CPG", choices=["CPG", "PD","TORQUE", "CARTESIAN_PD"], help="Motor control mode")
