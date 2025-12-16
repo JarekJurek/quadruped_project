@@ -57,7 +57,7 @@ class CustomCallback(BaseCallback):
         self.total_timesteps_train = total_timesteps
         self.terrain_difficulty_levels = terrain_difficulty
         self.max_num_stairs = max_num_stairs
-        self.last_set_stairs = -1
+        self.last_set_value = -1
         self.max_step_height = max_step_height
         self.difficulty_objective = difficulty_objective
 
