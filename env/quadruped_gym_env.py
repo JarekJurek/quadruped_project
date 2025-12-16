@@ -134,6 +134,7 @@ class QuadrupedGymEnv(gym.Env):
 
     def __init__(
         self,
+        # Simulation & Environment Config
         robot_config=robot_config,
         isRLGymInterface=True,
         time_step=0.001,
@@ -141,39 +142,51 @@ class QuadrupedGymEnv(gym.Env):
         motor_control_mode="CPG",
         task_env="LR_COURSE_TASK",
         observation_space_mode="LR_COURSE_OBS",
-        on_rack=False,
+        max_episode_length=10.0,
+        terrain=None,
+        
+        # Render & Debug
         render=False,
         record_video=False,
-        add_noise=True,
-        terrain=None,
+        on_rack=False,
         test_flagrun=False,
-        max_episode_length=10.0,
-        des_vel_x=0.8,
-        des_h=0.25,
-        des_g_c=0.07,
+        
+        # Noise & Randomization
+        add_noise=True,
         randomize_cpg_params=False,
         randomize_velocity_command=False,
+        
+        # Task Parameters (Velocity)
+        des_vel_x=0.8,
         des_vel_x_min=0.3,
         des_vel_x_max=0.8,
+        
+        # Task Parameters (CPG)
+        des_h=0.25,
+        des_g_c=0.07,
+        
+        # Task Parameters (Terrain)
         num_stairs=1,
         stair_height=0.05,
         stair_width=0.25,
+        slope_pitch=0.2,
+        
+        # Reward Weights
         vel_tracking_weight=1.0,
         drift_weight=0.5,
         yaw_weight=0.5,
         orientation_weight=1.0,
         height_weight=1.0,
-        survival_weight=1.0,
-        enable_vmc=False,
-        k_vmc=250,
-        dot_prod_min=0.85,
+        
+        # Control Parameters
         kp=None,
         kd=None,
-        slope_pitch=0.2,
-        disable_drift=False,
-        disable_yaw=False,
-        disable_orientation=False,
-        disable_energy=False,
+        enable_vmc=False,
+        k_vmc=250,
+        
+        # Termination
+        dot_prod_min=0.85,
+        
         **kwargs,
     ):  # any extra arguments from legacy
         """Initialize the quadruped gym environment.
@@ -249,12 +262,6 @@ class QuadrupedGymEnv(gym.Env):
         self._yaw_weight = yaw_weight
         self._orientation_weight = orientation_weight
         self._height_weight = height_weight
-        self._survival_weight = survival_weight
-
-        self.disable_drift = disable_drift
-        self.disable_yaw = disable_yaw
-        self.disable_orientation = disable_orientation
-        self.disable_energy = disable_energy
 
         self.enable_vmc = enable_vmc
         self.k_vmc = k_vmc
@@ -781,7 +788,6 @@ class QuadrupedGymEnv(gym.Env):
                 yaw_weight=self._yaw_weight,
                 orientation_weight=self._orientation_weight,
                 height_weight=self._height_weight,
-                survival_weight=self._survival_weight,
             )
         elif self._TASK_ENV == "FWD_BASIC":
             return self._reward_fwd_locomotion_basic()
