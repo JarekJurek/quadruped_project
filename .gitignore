@@ -5,7 +5,6 @@ logs/
 *.err
 trained_models/
 materials/
-videos/
 *.csv
 results_csv
-weights/
+videos_raw
